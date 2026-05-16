@@ -15,19 +15,18 @@ Bootstrap a sim-only research codebase for programmatic geometric guidance of 3D
 
 ## Current phase
 
-P02 environment and initial DP3 policy-core migration. The repo now has a pg3d-native
-simulation-free DP3 slice under `pg3d/policies/dp3` with synthetic import, inference, and
-training-step smoke tests. The private DP3 submodule remains as a temporary reference, not as the
-runtime import path. `make test`, `make lint`, `make smoke`, and the DP3 CPU/CUDA policy smoke pass
-across the Codex sandbox and RTX 5090 workstation checks.
+M1 RLBench ReachTarget smoke setup. The repo has a pg3d-native simulation-free DP3 slice under
+`pg3d/policies/dp3` with synthetic import, inference, and training-step smoke tests. RLBench is now
+tracked as an optional uv extra rather than a submodule, and the first `ReachTarget` smoke script
+fails early with actionable setup errors when RLBench, PyRep, or CoppeliaSim are missing.
 
 ## Immediate next steps
 
-1. Extend the pg3d-native DP3 slice from synthetic smoke tests to a generic zarr dataset and
+1. Install CoppeliaSim 4.1.0 and run `uv sync --extra cu129 --extra rlbench --group dev`.
+2. Run `uv run python scripts/rlbench_smoke_reach.py --headless true` on the workstation.
+3. Build the RLBench observation/dataset adapter against the pg3d DP3 schema.
+4. Extend the pg3d-native DP3 slice from synthetic smoke tests to a generic zarr dataset and
    one-step trainer smoke.
-2. Build the RLBench observation/dataset adapter against the pg3d DP3 schema.
-3. Keep `external/dp3` only as a reference until pg3d-native training/eval is validated.
-4. Install RLBench/PyRep/CoppeliaSim and launch `ReachTarget`.
 
 ## Active risks
 
@@ -38,12 +37,15 @@ across the Codex sandbox and RTX 5090 workstation checks.
 - The kinematic point-cloud world model is the novel project pivot and should be validated visually early.
 - This Codex sandbox cannot see a CUDA device, but `make gpu-check` and the CUDA DP3 smoke pass
   from the user's local pg3d terminal on the RTX 5090 workstation.
+- RLBench/PyRep/CoppeliaSim are not installed/configured in the current Codex environment, so the
+  first ReachTarget smoke can only validate dependency reporting here until workstation setup runs.
 
 ## Decisions already made
 
 - Project/repo/package name: `pg3d` for now.
 - Sim-only for this phase; real robot hardware code is out of scope.
 - RLBench is the primary simulator.
+- RLBench should be installed as an optional uv dependency, not carried as a submodule.
 - DP3 is the only base policy for P0; RISE is deferred.
 - DP3 runtime code should live in `pg3d/policies/dp3`; `external/dp3` is a temporary reference
   submodule during migration.

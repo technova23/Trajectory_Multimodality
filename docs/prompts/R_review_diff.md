@@ -1,7 +1,7 @@
 # Prompt R — Review current diff
 
 Goal:
-Review the current uncommitted diff before I accept or commit it.
+CODE REVIEW: Review the current uncommitted diff before I accept-and-commit or reject it.
 
 Read first:
 - `AGENTS.md`
@@ -11,5 +11,5 @@ Read first:
 Tasks:
 1. Identify correctness risks, scope creep, stale docs, dead code, and fragile assumptions.
 2. Check whether commands/tests were run and whether failures were documented.
-3. Suggest minimal fixes; do not rewrite large parts unless necessary.
+3. Suggest minimal fixes; do not write code.
 4. End with a concise commit message suggestion.

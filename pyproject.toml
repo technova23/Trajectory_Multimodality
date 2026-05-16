@@ -44,6 +44,12 @@ cu129 = [
   "torchaudio==2.11.0",
 ]
 
+# RLBench is optional because PyRep builds against a local CoppeliaSim install.
+# Keep this out of the base/test environment so package imports stay simulator-free.
+rlbench = [
+  "rlbench @ git+https://github.com/stepjam/RLBench.git@master",
+]
+
 [dependency-groups]
 dev = [
   "pytest>=8.2",
@@ -80,6 +86,11 @@ torchaudio = [
   { index = "pytorch-cpu", extra = "cpu" },
   { index = "pytorch-cu129", extra = "cu129" },
 ]
+
+[[tool.uv.dependency-metadata]]
+name = "PyRep"
+version = "4.1.0.3"
+requires-dist = ["cffi>=1.0.0"]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -119,3 +130,6 @@ ignore_missing_imports = true
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true

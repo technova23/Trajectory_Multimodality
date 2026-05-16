@@ -1,6 +1,6 @@
 # AGENTS.md — pg3d agent instructions
 
-This file is the durable operating guide for Codex and other coding agents working in this repository. Before making any file edits, show the proposed diff and wait for explicit user approval. Default to read-only analysis unless the user clearly authorizes edits.
+This file is the durable operating guide for Codex and other coding agents working in this repository. Default to read-only analysis unless the user clearly authorizes edits.
 
 ## Project objective
 

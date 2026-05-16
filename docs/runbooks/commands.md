@@ -10,10 +10,22 @@ RTX 5090 / CUDA 12.9 path:
 uv sync --extra cu129 --group dev
 ```
 
+RTX 5090 / CUDA 12.9 path with RLBench:
+
+```bash
+uv sync --extra cu129 --extra rlbench --group dev
+```
+
 CPU/debug path:
 
 ```bash
 uv sync --extra cpu --group dev
+```
+
+CPU/debug path with RLBench:
+
+```bash
+uv sync --extra cpu --extra rlbench --group dev
 ```
 
 ## Basic checks
@@ -63,14 +75,13 @@ cd pg3d
 uv sync --extra cu129 --group dev
 ```
 
-## RLBench/PyRep smoke placeholder
+## RLBench/PyRep smoke
 
-These commands should be replaced once RLBench setup is implemented:
+First configure CoppeliaSim as described in `docs/runbooks/rlbench_setup.md`, then run:
 
 ```bash
-# Example only; update after implementing M1.
 uv run python scripts/rlbench_smoke_reach.py --headless false
-uv run python scripts/rlbench_save_observation.py --task reach_target --out outputs/smoke/reach_obs
+uv run python scripts/rlbench_smoke_reach.py --headless true
 ```
 
 ## W&B
