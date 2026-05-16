@@ -11,6 +11,7 @@ mods = [
     "trimesh",
     "wandb",
     "pg3d",
+    "pg3d.policies.dp3",
     "pg3d.envs.rlbench_adapter",
     "pg3d.policies",
     "pg3d.world_model",

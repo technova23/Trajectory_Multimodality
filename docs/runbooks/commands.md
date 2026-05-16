@@ -34,11 +34,26 @@ uv run python scripts/smoke_imports.py
 uv run python scripts/check_gpu.py
 ```
 
+## DP3 policy smoke
+
+The pg3d-native DP3 slice is tested with synthetic point-cloud/state/action data:
+
+```bash
+uv run python scripts/smoke_dp3_policy.py --device cpu
+uv run python scripts/smoke_dp3_policy.py --device cuda
+```
+
+Use the CPU smoke in sandbox/CI contexts. Use the CUDA smoke on the RTX 5090 workstation after
+`make gpu-check` succeeds.
+
 ## Submodules
 
 ```bash
 git submodule update --init --recursive
 ```
+
+`external/dp3` is a private reference submodule. Runtime code should import
+`pg3d.policies.dp3`, not `external/dp3`.
 
 When cloning a new workstation:
 

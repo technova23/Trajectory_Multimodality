@@ -7,6 +7,7 @@ pg3d/
   envs/
     rlbench_adapter/        # simulator-specific wrappers and data collection
   policies/                 # policy interface and DP3 adapter
+    dp3/                    # pg3d-native, simulation-free DP3 policy core
   world_model/              # kinematic point-cloud imagination
   constraints/              # executable geometric constraint objects
   composition/              # rejection, reranking, receding horizon, later guidance
@@ -17,7 +18,24 @@ pg3d/
   utils/
 ```
 
-Keep simulator and policy dependencies lazy. Importing `pg3d` should not require RLBench, PyRep, CoppeliaSim, or DP3.
+Keep simulator and policy dependencies lazy. Importing `pg3d` should not require RLBench, PyRep,
+CoppeliaSim, or DP3. DP3 runtime imports should use `pg3d.policies.dp3`; the private
+`external/dp3` submodule is reference material during migration and should not be imported by
+pg3d runtime code.
+
+## DP3 policy slice
+
+The pg3d-native DP3 slice keeps only the model and training primitives needed for the RLBench
+reach MVP:
+
+- point-cloud/state encoder,
+- 1D diffusion action model,
+- normalizer, mask generator, EMA/checkpoint utilities as needed,
+- synthetic import/inference/loss smoke tests,
+- future generic zarr dataset and trainer scripts.
+
+It intentionally excludes upstream DP3 benchmark/simulation dependencies such as MuJoCo, Gym,
+MetaWorld, DexArt, RRL, PyTorch3D, and task-generation scripts.
 
 ## Core objects
 

@@ -20,8 +20,13 @@ Tasks:
 1. Run/inspect `uv sync --extra cu129 --group dev`.
 2. Run `make gpu-check`, `make test`, `make lint`, and `make smoke`.
 3. If PyTorch is CPU-only or CUDA is unavailable, diagnose whether the issue is uv index config, Python version, driver, or torch version.
-4. Update `docs/runbooks/setup_workstation.md` and `docs/runbooks/commands.md` with the working commands.
-5. Update `docs/status.md` and add a worklog entry.
+4. Run the pg3d-native DP3 synthetic smoke on CPU and, on the workstation, CUDA:
+   `uv run python scripts/smoke_dp3_policy.py --device cpu`
+   `uv run python scripts/smoke_dp3_policy.py --device cuda`
+5. Update `docs/runbooks/setup_workstation.md` and `docs/runbooks/commands.md` with the working commands.
+6. Update `docs/status.md` and add a worklog entry.
 
 Done when:
 - GPU smoke test succeeds, or the blocker is documented with next steps.
+- DP3 imports through `pg3d.policies.dp3` without simulator/benchmark dependencies.
+- A synthetic DP3 inference and training-step smoke test succeeds.

@@ -42,6 +42,12 @@ Expected for RTX 5090:
 
 If this fails, do not debug DP3 first. Fix PyTorch/CUDA installation first.
 
+Then verify the pg3d-native DP3 policy smoke:
+
+```bash
+uv run python scripts/smoke_dp3_policy.py --device cuda
+```
+
 ## 4. CoppeliaSim/PyRep/RLBench
 
 Set environment variables after installing CoppeliaSim 4.1.0:
@@ -64,6 +70,8 @@ make lint
 make smoke
 ```
 
+`make lint` intentionally excludes `external/`; submodules are not linted as pg3d source.
+
 ## 6. Verify W&B
 
 ```bash
@@ -76,3 +84,5 @@ export WANDB_MODE=offline
 
 - If PyRep or RLBench fails under Python 3.11, document the failure in `docs/status.md` and create an ADR before downgrading to Python 3.10 or splitting environments.
 - Do not let DP3 reinstall an older CPU/CUDA PyTorch build over the working RTX 5090 environment.
+- Use `pg3d.policies.dp3` for runtime DP3 code. `external/dp3` is kept as a temporary reference
+  while the narrow policy/training slice is ported.

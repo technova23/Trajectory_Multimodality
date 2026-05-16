@@ -29,7 +29,7 @@ When working on a specific milestone, also read the corresponding file in `docs/
 ## Engineering style
 
 - Prefer simple, working research code over elaborate frameworks.
-- Keep modules small and readable. Avoid clever abstractions unless the milestone needs them.
+- Keep modules small and readable. Avoid clever abstractions unless the milestone needs them. Use type hints, docstrings, and comments where they clarify non-obvious research code.
 - Use typed dataclasses or Pydantic models for shared objects like observations, action chunks, constraints, rollouts, and metrics.
 - Do not add heavy dependencies casually. If a dependency is needed, document why in the work log.
 - Do not import RLBench, PyRep, or DP3 at package import time. Keep simulator/policy dependencies lazy so CPU-only tests can run.
