@@ -48,6 +48,12 @@ cu129 = [
 # Keep this out of the base/test environment so package imports stay simulator-free.
 rlbench = [
   "rlbench @ git+https://github.com/stepjam/RLBench.git@master",
+  # RLBench currently declares this under its own "gym" extra, but imports it
+  # from core package paths used by our ReachTarget scripts.
+  "gymnasium==1.0.0a2",
+  # CoppeliaSim 4.9's Python wrapper imports these modules while loading add-ons.
+  "pyzmq>=26",
+  "cbor2>=5.6",
 ]
 
 [dependency-groups]

@@ -41,16 +41,34 @@ MetaWorld, DexArt, RRL, PyTorch3D, and task-generation scripts.
 
 ### Observation
 
+Durable policy/evaluation boundary decisions for this schema are recorded in
+`docs/adr/0008-observation-schema-and-masks.md`.
+
 ```python
 @dataclass
 class Observation:
     point_cloud: np.ndarray          # [N, 3], policy-visible
-    point_features: dict[str, Any]   # optional RGB/masks/features
+    point_features: dict[str, Any]   # optional aligned point features
     robot_mask: np.ndarray | None    # [N], optional but important for world model
     object_masks: dict[str, np.ndarray]
     robot_state: RobotState
     sim_gt: SimGroundTruth | None    # eval/debug only; not policy input
 ```
+
+Current shape conventions:
+
+- `point_cloud`: `float32 [N, 3]`, finite XYZ world points, DP3-visible.
+- `point_features["rgb"]`: optional `uint8 [N, 3]`; DP3 color use is opt-in.
+- `point_features["camera_index"]`: `int16 [N]`, camera provenance for debugging/artifacts.
+- `point_features["instance_id"]`: optional `int64 [N]` raw RLBench object handle ids; do not feed
+  this to policies by default.
+- `robot_mask`: optional `bool [N]` derived from simulator object handles; required by the real
+  ReachTarget save smoke because the world model needs robot-point removal.
+- `object_masks`: optional named `bool [N]` masks for eval/debug, such as ReachTarget `target` and
+  distractors. These are not policy inputs by default.
+- `RobotState.as_agent_pos()`: joint positions only for the first DP3 reach adapter.
+- `SimGroundTruth.target_position`: optional `float32 [3]` from ReachTarget low-dimensional task
+  state; eval/debug only.
 
 ### ActionChunk
 

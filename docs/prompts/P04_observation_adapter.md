@@ -26,4 +26,5 @@ Tasks:
 
 Done when:
 - One ReachTarget observation can be adapted and saved.
+- Optional flag to visualize some of the saved data (by saving a video file with appropriate info) is implemented and works.
 - Data shape conventions are documented.

@@ -84,6 +84,17 @@ uv run python scripts/rlbench_smoke_reach.py --headless false
 uv run python scripts/rlbench_smoke_reach.py --headless true
 ```
 
+Save one adapted ReachTarget observation bundle:
+
+```bash
+uv run python scripts/rlbench_save_observation.py --headless true \
+  --output-dir artifacts/rlbench_observation \
+  --visualize true
+```
+
+The bundle contains `summary.json`, `observation.npz`, and, with `--visualize true`,
+`observation.mp4`.
+
 ## W&B
 
 ```bash

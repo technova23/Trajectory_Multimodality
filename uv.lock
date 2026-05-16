@@ -206,6 +206,22 @@ css = [
 ]
 
 [[package]]
+name = "cbor2"
+version = "6.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/db/810437bcfe13cf5e09b68bad1ce57c8fa04ca9272c68946bbf2f4fa522c8/cbor2-6.1.1.tar.gz", hash = "sha256:6f0644869e0fdcd6f3874330b8f1cebd009f33191de43acf609dc2409cd362c4", size = 86297, upload-time = "2026-05-14T10:57:42.231Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/95/76ff805fec74222eaa3d9ed69041f9aeb36b2a01968ec6c9c705f52cce58/cbor2-6.1.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:06730f23bf0754456b90b9879eaae0d42521168529f216aa8915c0fc81a0a31c", size = 411431, upload-time = "2026-05-14T10:56:41.892Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/76/61c63119e5b362e452afd3066dc915e1fe43cceebc6d05e2728e16de8cb5/cbor2-6.1.1-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:2fc17da21cbb9b13fabe2d6e18dfa9b7f37b2e9d08f8c07b63950c3528b3329d", size = 457399, upload-time = "2026-05-14T10:56:43.528Z" },
+    { url = "https://files.pythonhosted.org/packages/02/19/6e96d8fee9abb3064eb12ebdfd1961bec9e8289ba4a87c8548c901397c1f/cbor2-6.1.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:fc389db70aa0f4b639bf4605b6d7f8ffcce5a613fbfece84a6312e89e6bb417b", size = 469032, upload-time = "2026-05-14T10:56:45.277Z" },
+    { url = "https://files.pythonhosted.org/packages/d7/1c/a510f123b6a482ddddf95e6abcbd640ffc934ce66651434ba6cf55067482/cbor2-6.1.1-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:a091b723d94bbd5072edc2d07786b413b967f62365853f6daef9fa1bee6de0d1", size = 523348, upload-time = "2026-05-14T10:56:46.979Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/c3/a6b3fe0c21af566e62819fb6ee644fed83528951de0570a31f0cc0b5b5aa/cbor2-6.1.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:770d52631e2e6e4f988000f134cc98c1efc32a3b8723ec3ac8d13d871ebf5c62", size = 535274, upload-time = "2026-05-14T10:56:48.829Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/8a/e76adfd70827f0525d80b2ac9678e34326314b6d800e21c0261ec1c22687/cbor2-6.1.1-cp311-cp311-win32.whl", hash = "sha256:fa143540f6e7240360755d95e34b4faa0ef921cc37cbb5f5d5d508b7368b0ebc", size = 284589, upload-time = "2026-05-14T10:56:50.226Z" },
+    { url = "https://files.pythonhosted.org/packages/19/10/bdb8be6357cfdc3eb319821aba2b603205887b5d198710ef0b17bd47b151/cbor2-6.1.1-cp311-cp311-win_amd64.whl", hash = "sha256:d97e577d93e15a50c3eeb0da6cf0b94e8aea4a1c541d9b41d06d1c96ce83dbd3", size = 300678, upload-time = "2026-05-14T10:56:51.485Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/5d/b2b550c65f0dbe74eeeec7ad0823fea2859346161d1f712b631f20801911/cbor2-6.1.1-cp311-cp311-win_arm64.whl", hash = "sha256:710b4b33f525c7e005e62f28d7c512bfd1e7c208105e3a21f56f8051e55bb020", size = 291504, upload-time = "2026-05-14T10:56:52.692Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.4.22"
 source = { registry = "https://pypi.org/simple" }
@@ -282,6 +298,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/bb/63/f9e1ea081ce35720d8b92acde70daaedace594dc93b693c869e0d5910718/click-8.3.3.tar.gz", hash = "sha256:398329ad4837b2ff7cbe1dd166a4c0f8900c3ca3a218de04466f38f6497f18a2", size = 328061, upload-time = "2026-04-22T15:11:27.506Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ae/44/c1221527f6a71a01ec6fbad7fa78f1d50dfa02217385cf0fa3eec7087d59/click-8.3.3-py3-none-any.whl", hash = "sha256:a2bf429bb3033c89fa4936ffb35d5cb471e3719e1f3c8a7c3fff0b8314305613", size = 110502, upload-time = "2026-04-22T15:11:25.044Z" },
+]
+
+[[package]]
+name = "cloudpickle"
+version = "3.1.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/27/fb/576f067976d320f5f0114a8d9fa1215425441bb35627b1993e5afd8111e5/cloudpickle-3.1.2.tar.gz", hash = "sha256:7fda9eb655c9c230dab534f1983763de5835249750e85fbcef43aaa30a9a2414", size = 22330, upload-time = "2025-11-03T09:25:26.604Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/88/39/799be3f2f0f38cc727ee3b4f1445fe6d5e4133064ec2e4115069418a5bb6/cloudpickle-3.1.2-py3-none-any.whl", hash = "sha256:9acb47f6afd73f60dc1df93bb801b472f05ff42fa6c84167d25cb206be1fbf4a", size = 22228, upload-time = "2025-11-03T09:25:25.534Z" },
 ]
 
 [[package]]
@@ -522,6 +547,15 @@ wheels = [
 ]
 
 [[package]]
+name = "farama-notifications"
+version = "0.0.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/91/14397890dde30adc4bee6462158933806207bc5dd10d7b4d09d5c33845cf/farama_notifications-0.0.6.tar.gz", hash = "sha256:b19acac4bb41d76e59e03394b5dd165f4761c86fa327f56307a35cbee3b60158", size = 2517, upload-time = "2026-04-24T08:43:57.603Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7c/f0/21f81892e4ed10f4ec3ef2e7cf8635fb76e7c0907c55d0da66be50094760/farama_notifications-0.0.6-py3-none-any.whl", hash = "sha256:f84839188efa1ce5bb361c2a84881b2dc2c0d0d7fb661ff00421820170930935", size = 2897, upload-time = "2026-04-24T08:43:56.785Z" },
+]
+
+[[package]]
 name = "fasteners"
 version = "0.20"
 source = { registry = "https://pypi.org/simple" }
@@ -605,6 +639,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/33/f6/354ae6491228b5eb40e10d89c4d13c651fe1cf7556e35ebdded50cff57ce/gitpython-3.1.50.tar.gz", hash = "sha256:80da2d12504d52e1f998772dc5baf6e553f8d2fcfe1fcc226c9d9a2ee3372dcc", size = 219798, upload-time = "2026-05-06T04:01:26.571Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/20/7a/1c6e3562dfd8950adbb11ffbc65d21e7c89d01a6e4f137fa981056de25c5/gitpython-3.1.50-py3-none-any.whl", hash = "sha256:d352abe2908d07355014abdd21ddf798c2a961469239afec4962e9da884858f9", size = 212507, upload-time = "2026-05-06T04:01:23.799Z" },
+]
+
+[[package]]
+name = "gymnasium"
+version = "1.0.0a2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cloudpickle" },
+    { name = "farama-notifications" },
+    { name = "numpy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/82/07/d345f9519928c7b8851a580f2c1ae3773845f75d944e3f560dc92bb4b0ad/gymnasium-1.0.0a2.tar.gz", hash = "sha256:e9f7967b71d177f2183ab4f0afc2c7c73a2bae3be2028b703363820469c22b34", size = 818471, upload-time = "2024-05-21T09:57:52.714Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/de/3c/84dd30bc10dfd7147b450eba71252da995ada6166bdb3899debc9b403cc9/gymnasium-1.0.0a2-py3-none-any.whl", hash = "sha256:f80f38850da5b30930db8afbce691c102daa07c447536c325dc5bc06f23ff3e8", size = 954294, upload-time = "2024-05-21T09:57:50.848Z" },
 ]
 
 [[package]]
@@ -1705,6 +1754,9 @@ cu129 = [
     { name = "torchvision", version = "0.26.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" } },
 ]
 rlbench = [
+    { name = "cbor2" },
+    { name = "gymnasium" },
+    { name = "pyzmq" },
     { name = "rlbench" },
 ]
 
@@ -1724,8 +1776,10 @@ notebooks = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cbor2", marker = "extra == 'rlbench'", specifier = ">=5.6" },
     { name = "diffusers", specifier = ">=0.35" },
     { name = "einops", specifier = ">=0.7" },
+    { name = "gymnasium", marker = "extra == 'rlbench'", specifier = "==1.0.0a2" },
     { name = "h5py", specifier = ">=3.10" },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "imageio", extras = ["ffmpeg"], specifier = ">=2.34" },
@@ -1736,6 +1790,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "pyzmq", marker = "extra == 'rlbench'", specifier = ">=26" },
     { name = "rich", specifier = ">=13.7" },
     { name = "rlbench", marker = "extra == 'rlbench'", git = "https://github.com/stepjam/RLBench.git?rev=master" },
     { name = "scipy", specifier = ">=1.11" },

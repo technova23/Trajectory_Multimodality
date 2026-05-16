@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib
+import subprocess
+import sys
 
 import pg3d
 
@@ -26,3 +28,15 @@ def test_package_imports() -> None:
 def test_planned_packages_import_without_sim_dependencies() -> None:
     for package in PLANNED_PACKAGES:
         importlib.import_module(package)
+
+
+def test_rlbench_adapter_import_keeps_rlbench_lazy() -> None:
+    code = """
+import importlib
+import sys
+
+importlib.import_module("pg3d.envs.rlbench_adapter")
+assert "rlbench" not in sys.modules
+assert "pyrep" not in sys.modules
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)

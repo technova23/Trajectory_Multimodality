@@ -10,7 +10,7 @@ Install:
 - Git + Git LFS,
 - uv,
 - build-essential / compiler toolchain,
-- CoppeliaSim 4.1.0 for RLBench/PyRep,
+- CoppeliaSim 4.9.0 rev6 for the current RLBench observation smoke path,
 - optional: tmux, htop, nvtop, ffmpeg.
 
 ## 2. Clone repo
@@ -50,10 +50,10 @@ uv run python scripts/smoke_dp3_policy.py --device cuda
 
 ## 4. CoppeliaSim/PyRep/RLBench
 
-Set environment variables after installing CoppeliaSim 4.1.0:
+Set environment variables after installing CoppeliaSim:
 
 ```bash
-export COPPELIASIM_ROOT=/path/to/CoppeliaSim_Edu_V4_1_0_Ubuntu20_04
+export COPPELIASIM_ROOT=/home/krishna/code/CoppeliaSim_Edu_V4_9_0_rev6_Ubuntu22_04
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COPPELIASIM_ROOT
 export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
 ```
