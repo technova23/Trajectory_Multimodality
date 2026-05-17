@@ -10,7 +10,9 @@ from scripts.rollout_dp3_reach_policy import (
     append_obs_window,
     make_initial_obs_window,
     policy_action_to_sim_action,
+    rollout_spec_video_stem,
     select_mixed_rollout_specs,
+    select_random_dataset_rollout_specs,
     select_rollout_specs,
 )
 
@@ -121,6 +123,46 @@ def test_select_mixed_rollout_specs_defaults_to_three_dataset_two_fresh() -> Non
 
     assert [spec.source for spec in specs] == ["dataset", "dataset", "dataset", "fresh", "fresh"]
     assert [spec.seed for spec in specs] == [1, 2, 3, 10001, 10002]
+
+
+def test_select_random_dataset_rollout_specs_is_deterministic_and_clamped() -> None:
+    seeds = [10, 11, 12, 13, 14, 15]
+
+    first = select_random_dataset_rollout_specs(
+        dataset_episode_seeds=seeds,
+        total_count=3,
+        seed=7,
+    )
+    second = select_random_dataset_rollout_specs(
+        dataset_episode_seeds=seeds,
+        total_count=3,
+        seed=7,
+    )
+    clamped = select_random_dataset_rollout_specs(
+        dataset_episode_seeds=seeds[:2],
+        total_count=5,
+        seed=7,
+    )
+
+    assert [spec.dataset_episode_index for spec in first] == [
+        spec.dataset_episode_index for spec in second
+    ]
+    assert len({spec.dataset_episode_index for spec in first}) == 3
+    assert len(clamped) == 2
+    assert all(spec.source == "dataset" for spec in first)
+
+
+def test_rollout_spec_video_stem_includes_validation_episode_identity() -> None:
+    spec = select_random_dataset_rollout_specs(
+        dataset_episode_seeds=[20000, 20001, 20002],
+        total_count=1,
+        seed=0,
+    )[0]
+
+    stem = rollout_spec_video_stem(spec, validation=True)
+
+    assert stem.startswith("validation_episode_")
+    assert stem.endswith(f"_seed_{spec.seed}")
 
 
 def test_distance_drift_ignores_non_finite_values() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -101,13 +102,22 @@ def test_checkpoint_dir_replaces_checkpoint_out_cli(tmp_path: Path) -> None:
             "1",
             "--checkpoint-dir",
             str(tmp_path / "checkpoints"),
+            "--checkpoint-rollout-dataset",
+            str(tmp_path / "val.zarr"),
+            "--checkpoint-rollout-selection-seed",
+            "11",
         ]
     )
 
     assert args.checkpoint_dir == tmp_path / "checkpoints"
+    assert args.checkpoint_rollout_dataset == tmp_path / "val.zarr"
+    assert args.checkpoint_rollout_selection_seed == 11
     assert not hasattr(args, "checkpoint_out")
     with pytest.raises(SystemExit):
         train.parse_args(["--checkpoint-out", str(tmp_path / "policy.pt")])
+
+    default_seed_args = train.parse_args(["--max-steps", "1", "--seed", "9"])
+    assert default_seed_args.checkpoint_rollout_selection_seed == 9
 
 
 def test_trainer_writes_periodic_and_final_checkpoints(tmp_path: Path) -> None:
@@ -188,6 +198,67 @@ def test_checkpoint_rollout_failure_is_nonfatal(tmp_path: Path, monkeypatch) -> 
     )
 
     assert run.logged == [({"rollout/skipped": 1.0}, 7)]
+
+
+def test_checkpoint_rollout_dataset_selects_validation_specs(tmp_path: Path) -> None:
+    validation_path = tmp_path / "val.zarr"
+    validation_path.mkdir()
+    (validation_path / "metadata.json").write_text(
+        json.dumps(
+            {
+                "env_id": "PG3DReach-Workspace-v0",
+                "env_kwargs": {},
+                "episodes": [{"seed": 20000 + idx} for idx in range(10)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        checkpoint_rollout_dataset=validation_path,
+        checkpoint_rollout_count=5,
+        checkpoint_rollout_selection_seed=3,
+        checkpoint_rollout_seed_start=10000,
+    )
+    train_dataset = type(
+        "Dataset",
+        (),
+        {"metadata": {"episodes": [{"seed": 0}, {"seed": 1}, {"seed": 10000}]}},
+    )()
+
+    metadata, specs, using_validation_dataset = train._checkpoint_rollout_metadata_and_specs(
+        args,
+        train_dataset=train_dataset,  # type: ignore[arg-type]
+    )
+
+    assert using_validation_dataset
+    assert metadata["env_id"] == "PG3DReach-Workspace-v0"
+    assert len(specs) == 5
+    assert all(spec.source == "dataset" for spec in specs)
+    assert all(spec.seed >= 20000 for spec in specs)
+    assert len({spec.dataset_episode_index for spec in specs}) == 5
+
+
+def test_checkpoint_rollout_without_validation_dataset_keeps_mixed_specs() -> None:
+    args = argparse.Namespace(
+        checkpoint_rollout_dataset=None,
+        checkpoint_rollout_count=5,
+        checkpoint_rollout_selection_seed=3,
+        checkpoint_rollout_seed_start=10000,
+    )
+    train_dataset = type(
+        "Dataset",
+        (),
+        {"metadata": {"episodes": [{"seed": 1}, {"seed": 2}, {"seed": 3}, {"seed": 10000}]}},
+    )()
+
+    _metadata, specs, using_validation_dataset = train._checkpoint_rollout_metadata_and_specs(
+        args,
+        train_dataset=train_dataset,  # type: ignore[arg-type]
+    )
+
+    assert not using_validation_dataset
+    assert [spec.source for spec in specs] == ["dataset", "dataset", "dataset", "fresh", "fresh"]
+    assert [spec.seed for spec in specs] == [1, 2, 3, 10001, 10002]
 
 
 def test_train_script_import_keeps_checkpoint_rollout_deps_lazy() -> None:

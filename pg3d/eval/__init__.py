@@ -1,4 +1,5 @@
 from pg3d.eval.constrained_reach import (
+    ArtifactSelection,
     AvoidOverlayConfig,
     EpisodePath,
     TimingEvent,
@@ -13,6 +14,7 @@ from pg3d.eval.constrained_reach import (
     q_trajectory_smoothness,
     save_episode_constraints,
     scene_context_for_constraints,
+    select_artifact_episode_indices,
     should_emit_episode_artifact,
     success_rate_ci_rows,
     summarize_metrics,
@@ -22,6 +24,7 @@ from pg3d.eval.constrained_reach import (
 
 __all__ = [
     "AvoidOverlayConfig",
+    "ArtifactSelection",
     "EpisodePath",
     "TimingEvent",
     "TimingRecorder",
@@ -35,6 +38,7 @@ __all__ = [
     "progress_series",
     "save_episode_constraints",
     "scene_context_for_constraints",
+    "select_artifact_episode_indices",
     "should_emit_episode_artifact",
     "success_rate_ci_rows",
     "summarize_metrics",

@@ -48,7 +48,12 @@ JSONL metrics, per-episode constraint JSON, optional MP4/Rerun artifacts, W&B lo
 interval summaries. The eval runner now defaults to a faster q/EEF scoring mode that avoids
 per-timestep ghost point-cloud renders during candidate scoring, while preserving an exact
 full-render mode for small validation spot checks. It also supports timing JSONL, periodic local
-plots, periodic video/Rerun artifacts, and incremental W&B progress logging.
+plots, deterministic validation-subset video/Rerun artifacts, and incremental W&B progress
+logging. Training checkpoint rollout videos can now use a held-out validation Zarr instead of
+mixed train/fresh seeds. Constrained-eval visualization artifacts now also show the sampled
+avoid-region geometry: Rerun exports log persistent keep-out wireframes, and MP4s use a
+best-effort separate render-only ManiSkill env so visual overlays do not alter policy observations
+or simulator control.
 
 ## Immediate next steps
 
@@ -121,6 +126,11 @@ plots, periodic video/Rerun artifacts, and incremental W&B progress logging.
   comparisons when validating speedups.
 - Constrained reach validation should use a held-out solved validation Zarr with `--source dataset`
   rather than arbitrary `--source fresh` seeds when comparing methods.
+- Checkpoint rollout videos and eval MP4/Rerun artifacts should use a deterministic random
+  5-episode subset of the held-out validation Zarr for comparable in-distribution visual checks.
+- Avoid-region visualization is eval-only and visual-only: overlays are allowed in constrained
+  eval MP4/Rerun artifacts, but they must not enter policy-visible point clouds, segmentation
+  masks, or the control env.
 - The first 50-episode workspace validation comparison showed 2% reach success for all three
   methods and 0% combined success, so the current bottleneck is base reach reliability rather than
   constraint selection.
@@ -166,3 +176,6 @@ See `docs/worklog/`.
   pure tests for overlay generation, Wilson intervals, metric aggregation, clearance, horizon
   validation, multi-chunk rollout concatenation, timing aggregation, periodic artifact selection,
   batched DP3 sampling, fast-mode render counts, and lazy eval imports.
+  Avoid-region artifact visualization adds pure wireframe tests plus a constrained-eval MP4 overlay
+  path that falls back to plain video if the separate render-only ManiSkill env cannot create
+  visual actors.

@@ -5,6 +5,7 @@ import json
 import math
 import os
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -26,7 +27,7 @@ from pg3d.composition.scoring import (
     primary_constraint_penalty,
     trajectory_smoothness,
 )
-from pg3d.constraints import AvoidRegion
+from pg3d.constraints import AvoidRegion, BoxRegion, SphereRegion
 from pg3d.envs.maniskill_adapter import (
     ManiSkillGhostPandaGeometryProvider,
     register_pg3d_reach_envs,
@@ -46,6 +47,7 @@ from pg3d.eval import (
     progress_series,
     save_episode_constraints,
     scene_context_for_constraints,
+    select_artifact_episode_indices,
     should_emit_episode_artifact,
     summarize_metrics,
     validate_planning_horizons,
@@ -223,6 +225,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     if not specs:
         raise RuntimeError("no constrained-reach episodes selected")
+    artifact_seed = args.artifact_selection_seed
+    video_episode_indices = set(
+        select_artifact_episode_indices(
+            [spec.output_index for spec in specs],
+            selection=args.artifact_selection,
+            count=args.artifact_episode_count,
+            seed=artifact_seed,
+            every_episodes=args.video_every_episodes,
+        )
+    )
+    rerun_episode_indices = set(
+        select_artifact_episode_indices(
+            [spec.output_index for spec in specs],
+            selection=args.artifact_selection,
+            count=args.artifact_episode_count,
+            seed=artifact_seed,
+            every_episodes=args.rerun_every_episodes,
+        )
+    )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     run = _init_wandb(args, metadata=metadata, checkpoint_path=checkpoint_path)
@@ -265,14 +286,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 with timer.time("json_write", artifact="constraint"):
                     save_episode_constraints(constraint_path, constraints)
-                write_video = args.video and should_emit_episode_artifact(
-                    spec.output_index,
-                    args.video_every_episodes,
-                )
-                write_rerun = args.rerun and should_emit_episode_artifact(
-                    spec.output_index,
-                    args.rerun_every_episodes,
-                )
+                write_video = args.video and spec.output_index in video_episode_indices
+                write_rerun = args.rerun and spec.output_index in rerun_episode_indices
                 for method in args.methods:
                     row = run_eval_episode(
                         sim_env=sim_env,
@@ -300,6 +315,13 @@ def main(argv: list[str] | None = None) -> int:
                         decisions_file=decisions_file,
                         rng=rng,
                         timer=timer,
+                        video_env_factory=_video_env_factory(
+                            gym,
+                            metadata=metadata,
+                            enabled=write_video and args.constraint_overlay_video,
+                        ),
+                        constraint_overlay_alpha=args.constraint_overlay_alpha,
+                        constraint_overlay_color=tuple(args.constraint_overlay_color),
                     )
                     rows.append(row)
                     with timer.time("json_write", artifact="metrics"):
@@ -353,6 +375,15 @@ def main(argv: list[str] | None = None) -> int:
         "execution_horizon_chunks": args.execution_horizon_chunks,
         "geometry_mode": args.geometry_mode,
         "k_schedule": list(args.k_schedule),
+        "artifact_selection": _artifact_selection_summary(
+            specs,
+            video_episode_indices=video_episode_indices,
+            rerun_episode_indices=rerun_episode_indices,
+            args=args,
+        ),
+        "constraint_overlay_video": bool(args.constraint_overlay_video),
+        "constraint_overlay_alpha": float(args.constraint_overlay_alpha),
+        "constraint_overlay_color": list(args.constraint_overlay_color),
         "timing": timer.summary(),
         "episodes": rows,
         "by_method": summarize_metrics(rows),
@@ -426,8 +457,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--video", action="store_true")
     parser.add_argument("--video-every-episodes", type=int, default=10)
+    parser.add_argument(
+        "--constraint-overlay-video",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Render avoid-region overlays in constrained-eval MP4s using a separate env.",
+    )
+    parser.add_argument("--constraint-overlay-alpha", type=float, default=0.25)
+    parser.add_argument(
+        "--constraint-overlay-color",
+        type=float,
+        nargs=3,
+        default=[1.0, 0.25, 0.05],
+        metavar=("R", "G", "B"),
+    )
     parser.add_argument("--rerun", action="store_true")
     parser.add_argument("--rerun-every-episodes", type=int, default=10)
+    parser.add_argument(
+        "--artifact-selection",
+        choices=["periodic", "random", "all"],
+        default="periodic",
+    )
+    parser.add_argument("--artifact-episode-count", type=int, default=5)
+    parser.add_argument("--artifact-selection-seed", type=int, default=None)
     parser.add_argument("--plots", action="store_true")
     parser.add_argument("--plot-every-episodes", type=int, default=10)
     parser.add_argument("--profile", action="store_true")
@@ -470,6 +522,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             raise ValueError(f"--{name.replace('_', '-')} must be positive")
     if args.video_fps <= 0:
         raise ValueError("--video-fps must be positive")
+    if not 0.0 <= args.constraint_overlay_alpha <= 1.0:
+        raise ValueError("--constraint-overlay-alpha must be in [0, 1]")
+    if any(value < 0.0 or value > 1.0 for value in args.constraint_overlay_color):
+        raise ValueError("--constraint-overlay-color components must be in [0, 1]")
+    if args.artifact_episode_count <= 0:
+        raise ValueError("--artifact-episode-count must be positive")
+    if args.artifact_selection_seed is None:
+        args.artifact_selection_seed = args.seed
     return args
 
 
@@ -509,8 +569,12 @@ def run_eval_episode(
     decisions_file: Any,
     rng: np.random.Generator,
     timer: TimingRecorder,
+    video_env_factory: Callable[[], Any] | None = None,
+    constraint_overlay_alpha: float = 0.25,
+    constraint_overlay_color: tuple[float, float, float] = (1.0, 0.25, 0.05),
 ) -> dict[str, Any]:
     sim_obs, sim_info = sim_env.reset(seed=spec.seed, options={"reconfigure": True})
+    video_env: Any | None = None
     with timer.time("observation_adapt_crop", source="reset"):
         sim_entry = rollout_observation_entry(
             sim_obs,
@@ -530,8 +594,15 @@ def run_eval_episode(
     timeline = [sim_entry.copy()]
     frames = []
     if video:
+        video_env = _maybe_create_overlay_video_env(
+            video_env_factory=video_env_factory,
+            spec=spec,
+            constraints=constraints,
+            color=constraint_overlay_color,
+            alpha=constraint_overlay_alpha,
+        )
         with timer.time("video_frame_render", method=method):
-            frames.append(_frame_to_numpy(sim_env.render()))
+            frames.append(_frame_to_numpy(_render_video_frame(sim_env, video_env)))
     provider: ManiSkillGhostPandaGeometryProvider | None = None
     world_model: GeometricWorldModel | None = None
     if method != "base":
@@ -622,8 +693,19 @@ def run_eval_episode(
                 _append_path(path, sim_entry)
                 timeline.append(sim_entry.copy())
                 if video:
+                    if video_env is not None:
+                        try:
+                            video_env.step(sim_action)
+                        except Exception as exc:
+                            print(
+                                "warning: constraint overlay video step failed, "
+                                f"falling back to plain render: {type(exc).__name__}: {exc}",
+                                file=sys.stderr,
+                            )
+                            _close_env(video_env)
+                            video_env = None
                     with timer.time("video_frame_render", method=method):
-                        frames.append(_frame_to_numpy(sim_env.render()))
+                        frames.append(_frame_to_numpy(_render_video_frame(sim_env, video_env)))
                 success = _bool_info(sim_info, "success")
                 if success and first_success_step is None:
                     first_success_step = steps
@@ -642,6 +724,8 @@ def run_eval_episode(
     finally:
         if was_training:
             policy.train()
+        if video_env is not None:
+            _close_env(video_env)
 
     video_path = None
     if video:
@@ -652,7 +736,7 @@ def run_eval_episode(
     if rerun:
         rerun_path = output_dir / "rerun" / method / f"episode_{spec.output_index:03d}.rrd"
         with timer.time("rerun_write", method=method):
-            save_rerun_timeline(rerun_path, timeline)
+            save_rerun_timeline(rerun_path, timeline, constraints=constraints)
     return episode_metric_row(
         method=method,
         episode=spec.output_index,
@@ -1160,6 +1244,106 @@ def _env_kwargs(metadata: dict[str, Any], *, render_mode: str | None) -> dict[st
     return env_kwargs
 
 
+def _video_env_factory(
+    gym: Any,
+    *,
+    metadata: dict[str, Any],
+    enabled: bool,
+) -> Callable[[], Any] | None:
+    if not enabled:
+        return None
+    env_kwargs = _env_kwargs(metadata, render_mode="rgb_array")
+
+    def factory() -> Any:
+        return gym.make(str(metadata["env_id"]), **env_kwargs)
+
+    return factory
+
+
+def _maybe_create_overlay_video_env(
+    *,
+    video_env_factory: Callable[[], Any] | None,
+    spec: RolloutSpec,
+    constraints: list[AvoidRegion],
+    color: tuple[float, float, float],
+    alpha: float,
+) -> Any | None:
+    if video_env_factory is None:
+        return None
+    video_env = None
+    try:
+        video_env = video_env_factory()
+        video_env.reset(seed=spec.seed, options={"reconfigure": True})
+        _add_constraint_overlay_actors(
+            video_env,
+            constraints=constraints,
+            color=color,
+            alpha=alpha,
+        )
+        return video_env
+    except Exception as exc:
+        print(
+            "warning: constraint overlay video setup failed, falling back to plain render: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        if video_env is not None:
+            _close_env(video_env)
+        return None
+
+
+def _add_constraint_overlay_actors(
+    env: Any,
+    *,
+    constraints: list[AvoidRegion],
+    color: tuple[float, float, float],
+    alpha: float,
+) -> None:
+    """Add visual-only keep-out actors to a render-only ManiSkill env."""
+    import sapien
+    from mani_skill.utils.building import actors
+
+    unwrapped = getattr(env, "unwrapped", env)
+    scene = unwrapped.scene
+    rgba = [float(color[0]), float(color[1]), float(color[2]), float(alpha)]
+    for constraint_idx, constraint in enumerate(constraints):
+        region = constraint.region
+        name = f"pg3d_avoid_region_overlay_{constraint_idx}"
+        if isinstance(region, SphereRegion):
+            actors.build_sphere(
+                scene,
+                radius=float(region.radius),
+                color=rgba,
+                name=name,
+                body_type="kinematic",
+                add_collision=False,
+                initial_pose=sapien.Pose(p=region.center.tolist()),
+            )
+        elif isinstance(region, BoxRegion):
+            actors.build_box(
+                scene,
+                half_sizes=region.half_extents.tolist(),
+                color=rgba,
+                name=name,
+                body_type="kinematic",
+                add_collision=False,
+                initial_pose=sapien.Pose(p=region.center.tolist()),
+            )
+    update_render = getattr(scene, "update_render", None)
+    if callable(update_render):
+        update_render()
+
+
+def _render_video_frame(sim_env: Any, video_env: Any | None) -> Any:
+    return video_env.render() if video_env is not None else sim_env.render()
+
+
+def _close_env(env: Any) -> None:
+    close = getattr(env, "close", None)
+    if callable(close):
+        close()
+
+
 def _copy_entry(entry: Entry) -> Entry:
     return {
         key: value.copy() if isinstance(value, np.ndarray) else value
@@ -1181,6 +1365,41 @@ def _env_task_name(env: Any) -> str:
     unwrapped = getattr(env, "unwrapped", env)
     spec = getattr(unwrapped, "spec", None)
     return str(getattr(spec, "id", "unknown"))
+
+
+def _artifact_selection_summary(
+    specs: list[RolloutSpec],
+    *,
+    video_episode_indices: set[int],
+    rerun_episode_indices: set[int],
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    spec_by_output = {spec.output_index: spec for spec in specs}
+    return {
+        "selection": args.artifact_selection,
+        "episode_count": args.artifact_episode_count,
+        "seed": args.artifact_selection_seed,
+        "video": _selected_spec_summary(spec_by_output, video_episode_indices),
+        "rerun": _selected_spec_summary(spec_by_output, rerun_episode_indices),
+    }
+
+
+def _selected_spec_summary(
+    spec_by_output: dict[int, RolloutSpec],
+    selected_output_indices: set[int],
+) -> list[dict[str, int | str | None]]:
+    rows: list[dict[str, int | str | None]] = []
+    for output_index in sorted(selected_output_indices):
+        spec = spec_by_output[output_index]
+        rows.append(
+            {
+                "output_index": spec.output_index,
+                "seed": spec.seed,
+                "source": spec.source,
+                "dataset_episode_index": spec.dataset_episode_index,
+            }
+        )
+    return rows
 
 
 def _unique_cost_key(costs: dict[str, float], key: str) -> str:
@@ -1215,6 +1434,12 @@ def _init_wandb(
                 "planning_horizon_chunks": args.planning_horizon_chunks,
                 "execution_horizon_chunks": args.execution_horizon_chunks,
                 "k_schedule": list(args.k_schedule),
+                "artifact_selection": args.artifact_selection,
+                "artifact_episode_count": args.artifact_episode_count,
+                "artifact_selection_seed": args.artifact_selection_seed,
+                "constraint_overlay_video": bool(args.constraint_overlay_video),
+                "constraint_overlay_alpha": float(args.constraint_overlay_alpha),
+                "constraint_overlay_color": list(args.constraint_overlay_color),
                 "command": "scripts/eval_constrained_reach.py",
             },
         )

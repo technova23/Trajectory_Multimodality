@@ -21,6 +21,7 @@ from pg3d.utils.serialization import jsonable
 from pg3d.world_model import ActionChunk, ImaginedRollout
 
 EvalMethod = Literal["base", "rejection", "reranking"]
+ArtifactSelection = Literal["periodic", "random", "all"]
 SUCCESS_RATE_METRICS: tuple[tuple[str, str], ...] = (
     ("reach_success", "Reach"),
     ("constraint_satisfied", "Constraint"),
@@ -464,6 +465,43 @@ def should_emit_episode_artifact(episode_index: int, every_episodes: int) -> boo
     if every_episodes <= 0:
         raise ValueError("every_episodes must be positive")
     return episode_index == 0 or (episode_index + 1) % every_episodes == 0
+
+
+def select_artifact_episode_indices(
+    episode_indices: list[int],
+    *,
+    selection: ArtifactSelection,
+    count: int,
+    seed: int,
+    every_episodes: int,
+) -> list[int]:
+    """Select episode output indices for video/Rerun artifacts."""
+    if count <= 0:
+        raise ValueError("count must be positive")
+    if every_episodes <= 0:
+        raise ValueError("every_episodes must be positive")
+    if any(index < 0 for index in episode_indices):
+        raise ValueError("episode_indices must be non-negative")
+    if selection == "all":
+        return list(episode_indices)
+    if selection == "periodic":
+        return [
+            index
+            for index in episode_indices
+            if should_emit_episode_artifact(index, every_episodes)
+        ]
+    if selection == "random":
+        if not episode_indices:
+            return []
+        selected_count = min(count, len(episode_indices))
+        rng = np.random.default_rng(seed)
+        selected = rng.choice(
+            np.asarray(episode_indices, dtype=np.int64),
+            size=selected_count,
+            replace=False,
+        )
+        return sorted(int(index) for index in selected)
+    raise ValueError(f"unsupported artifact selection {selection!r}")
 
 
 def progress_series(rows: list[dict[str, Any]]) -> dict[str, dict[str, list[float]]]:

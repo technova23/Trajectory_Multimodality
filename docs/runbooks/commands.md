@@ -374,7 +374,9 @@ uv run python scripts/train_dp3_reach.py \
   --histogram-every 1000 \
   --checkpoint-dir "$CKPTS" \
   --checkpoint-every 5000 \
+  --checkpoint-rollout-dataset "$VAL_DATASET" \
   --checkpoint-rollout-count 5 \
+  --checkpoint-rollout-selection-seed 0 \
   --checkpoint-rollout-max-steps 80 \
   --checkpoint-rollout-post-success-steps 8
 ```
@@ -383,9 +385,10 @@ The trainer defaults to `pad_after=n_action_steps-1`, cosine LR with warmup, Ada
 `betas=(0.95, 0.999)`, gradient clipping, EMA checkpoint state, and W&B validation/action-error
 metrics. It writes periodic `step_XXXXXXXX.pt` checkpoints and a final
 `final_step_XXXXXXXX.pt` checkpoint under `--checkpoint-dir`. When W&B is active,
-it also attempts to log checkpoint-time rollout MP4s using three dataset seeds and two fresh seeds
-by default. Use `--no-checkpoint-rollout-videos` to skip simulator/rendering rollouts during
-training.
+it attempts to log checkpoint-time rollout MP4s. Pass `--checkpoint-rollout-dataset "$VAL_DATASET"`
+to use a deterministic random subset of five held-out validation episodes at every checkpoint
+instead of mixed train/fresh seeds. Use `--no-checkpoint-rollout-videos` to skip
+simulator/rendering rollouts during training.
 
 Run closed-loop policy rollouts in ManiSkill and save MP4/Rerun artifacts:
 
@@ -481,6 +484,9 @@ uv run python scripts/eval_constrained_reach.py \
   --video-every-episodes 10 \
   --rerun \
   --rerun-every-episodes 10 \
+  --artifact-selection random \
+  --artifact-episode-count 5 \
+  --artifact-selection-seed 0 \
   --plots \
   --plot-every-episodes 10 \
   --profile \
@@ -508,8 +514,13 @@ uv run python scripts/eval_constrained_reach.py \
   --policy-batch-size 64 \
   --video \
   --video-every-episodes 10 \
+  --constraint-overlay-video \
+  --constraint-overlay-alpha 0.25 \
   --rerun \
   --rerun-every-episodes 10 \
+  --artifact-selection random \
+  --artifact-episode-count 5 \
+  --artifact-selection-seed 0 \
   --plots \
   --plot-every-episodes 10 \
   --profile \
@@ -586,6 +597,47 @@ PY
 Outputs include `constraints/episode_XXX.json`, `metrics.jsonl`, `decisions.jsonl`,
 `summary.json`, optional `timings.jsonl`, optional `plots/*.png`, optional
 `videos/{method}/episode_XXX.mp4`, and optional `rerun/{method}/episode_XXX.rrd`.
+With `--artifact-selection random --artifact-episode-count 5 --artifact-selection-seed 0`,
+metrics still cover all 50 validation episodes, while MP4/Rerun artifacts are written only for
+one deterministic random subset of five validation episodes. The selected output indices, dataset
+episode indices, and seeds are recorded in `summary.json`.
+
+When `--video` is enabled, constrained-eval MP4s render the avoid region in a separate
+visualization-only ManiSkill env by default. This keeps the policy/control env unchanged while
+showing a translucent orange keep-out sphere or box in the saved video. Use
+`--no-constraint-overlay-video` to fall back to plain simulator renders, and tune the visual with
+`--constraint-overlay-alpha` and `--constraint-overlay-color R G B`. Rerun exports log the same
+avoid region under `world/constraints/avoid_region_*` as persistent wireframe geometry.
+
+One-episode overlay smoke for visual inspection:
+
+```bash
+export OVERLAY_OUT="$ART/constrained-reach-overlay-smoke"
+
+uv run python scripts/eval_constrained_reach.py \
+  --dataset "$VAL_DATASET" \
+  --checkpoint-dir "$CKPTS" \
+  --methods reranking \
+  --source dataset \
+  --episodes 1 \
+  --device cuda \
+  --seed 0 \
+  --planning-horizon-chunks 2 \
+  --execution-horizon-chunks 1 \
+  --geometry-mode fast \
+  --k-schedule 16 32 64 \
+  --policy-batch-size 64 \
+  --video \
+  --rerun \
+  --artifact-selection all \
+  --constraint-overlay-video \
+  --constraint-overlay-alpha 0.25 \
+  --constraint-overlay-color 1.0 0.25 0.05 \
+  --output-dir "$OVERLAY_OUT" \
+  --allow-failure
+
+uv run rerun "$OVERLAY_OUT/rerun/reranking/episode_000.rrd"
+```
 
 The default `--geometry-mode fast` avoids rendering ghost-env robot point clouds for every
 candidate timestep. It scores candidates from q/EEF trajectories and only renders ghost point

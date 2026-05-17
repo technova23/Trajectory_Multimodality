@@ -11,6 +11,7 @@ from typing import Any
 
 import torch
 
+from pg3d.envs.maniskill_adapter.dataset import load_reach_metadata
 from pg3d.policies.dp3 import ReachDatasetConfig, ReachSequenceDataset, SimpleDP3
 from pg3d.policies.dp3.checkpoint import (
     checkpoint_path_for_step,
@@ -301,6 +302,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=True,
     )
     parser.add_argument("--checkpoint-rollout-count", type=int, default=5)
+    parser.add_argument("--checkpoint-rollout-dataset", type=Path, default=None)
+    parser.add_argument("--checkpoint-rollout-selection-seed", type=int, default=None)
     parser.add_argument("--checkpoint-rollout-max-steps", type=int, default=50)
     parser.add_argument("--checkpoint-rollout-post-success-steps", type=int, default=8)
     parser.add_argument("--checkpoint-rollout-seed-start", type=int, default=10000)
@@ -326,6 +329,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         raise ValueError("--checkpoint-every must be non-negative")
     if args.checkpoint_rollout_count <= 0:
         raise ValueError("--checkpoint-rollout-count must be positive")
+    if args.checkpoint_rollout_selection_seed is None:
+        args.checkpoint_rollout_selection_seed = args.seed
     if args.checkpoint_rollout_max_steps <= 0:
         raise ValueError("--checkpoint-rollout-max-steps must be positive")
     if args.checkpoint_rollout_post_success_steps < 0:
@@ -578,18 +583,13 @@ def _log_checkpoint_rollouts(
     from scripts.rollout_dp3_reach_policy import (
         _action_mode,
         crop_config_from_metadata,
+        rollout_spec_video_stem,
         run_policy_rollout,
-        select_mixed_rollout_specs,
     )
 
-    metadata = train_dataset.metadata
-    dataset_episode_seeds = [
-        int(episode["seed"]) for episode in metadata.get("episodes", []) if "seed" in episode
-    ]
-    specs = select_mixed_rollout_specs(
-        dataset_episode_seeds=dataset_episode_seeds,
-        total_count=args.checkpoint_rollout_count,
-        seed_start=args.checkpoint_rollout_seed_start,
+    metadata, specs, using_validation_dataset = _checkpoint_rollout_metadata_and_specs(
+        args,
+        train_dataset=train_dataset,
     )
     if not specs:
         return
@@ -610,7 +610,9 @@ def _log_checkpoint_rollouts(
     try:
         env = gym.make(str(metadata["env_id"]), **env_kwargs)
         for spec in specs:
-            video_path = output_dir / f"{spec.source}_{spec.output_index:03d}.mp4"
+            video_path = output_dir / (
+                rollout_spec_video_stem(spec, validation=using_validation_dataset) + ".mp4"
+            )
             summaries.append(
                 run_policy_rollout(
                     env=env,
@@ -637,7 +639,7 @@ def _log_checkpoint_rollouts(
             policy.train()
 
     videos = {
-        f"rollout/{summary['source']}_{summary['episode']:03d}": wandb.Video(
+        f"rollout/{Path(str(summary['video'])).stem}": wandb.Video(
             summary["video"],
             fps=args.checkpoint_rollout_fps,
             format="mp4",
@@ -658,6 +660,17 @@ def _log_checkpoint_rollouts(
     run.log(
         {
             **videos,
+            "rollout/source": (
+                "validation_dataset" if using_validation_dataset else "mixed_train_fresh"
+            ),
+            "rollout/selected_dataset_episode_indices": json.dumps(
+                [
+                    summary["dataset_episode_index"]
+                    for summary in summaries
+                    if summary["dataset_episode_index"] is not None
+                ]
+            ),
+            "rollout/selected_seeds": json.dumps([summary["seed"] for summary in summaries]),
             "rollout/video_count": len(videos),
             "rollout/success_rate": success_rate,
             "rollout/final_distance_mean": (
@@ -668,6 +681,41 @@ def _log_checkpoint_rollouts(
         },
         step=step,
     )
+
+
+def _checkpoint_rollout_metadata_and_specs(
+    args: argparse.Namespace,
+    *,
+    train_dataset: ReachSequenceDataset,
+) -> tuple[dict[str, Any], list[Any], bool]:
+    from scripts.rollout_dp3_reach_policy import (
+        select_mixed_rollout_specs,
+        select_random_dataset_rollout_specs,
+    )
+
+    metadata = (
+        load_reach_metadata(args.checkpoint_rollout_dataset)
+        if args.checkpoint_rollout_dataset is not None
+        else train_dataset.metadata
+    )
+    dataset_episode_seeds = [
+        int(episode["seed"]) for episode in metadata.get("episodes", []) if "seed" in episode
+    ]
+    using_validation_dataset = args.checkpoint_rollout_dataset is not None
+    specs = (
+        select_random_dataset_rollout_specs(
+            dataset_episode_seeds=dataset_episode_seeds,
+            total_count=args.checkpoint_rollout_count,
+            seed=args.checkpoint_rollout_selection_seed,
+        )
+        if using_validation_dataset
+        else select_mixed_rollout_specs(
+            dataset_episode_seeds=dataset_episode_seeds,
+            total_count=args.checkpoint_rollout_count,
+            seed_start=args.checkpoint_rollout_seed_start,
+        )
+    )
+    return metadata, specs, using_validation_dataset
 
 
 if __name__ == "__main__":

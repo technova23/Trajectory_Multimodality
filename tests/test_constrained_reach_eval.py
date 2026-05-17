@@ -23,6 +23,7 @@ from pg3d.eval import (
     progress_series,
     save_episode_constraints,
     scene_context_for_constraints,
+    select_artifact_episode_indices,
     should_emit_episode_artifact,
     success_rate_ci_rows,
     summarize_metrics,
@@ -32,9 +33,14 @@ from pg3d.eval import (
 from pg3d.world_model import ActionChunk, ImaginedRollout
 from scripts.eval_constrained_reach import (
     DP3ChunkPolicyAdapter,
+    _artifact_selection_summary,
     _build_multichunk_candidates,
     _seed_torch,
 )
+from scripts.eval_constrained_reach import (
+    parse_args as parse_eval_args,
+)
+from scripts.rollout_dp3_reach_policy import RolloutSpec
 
 
 def test_direct_path_avoid_region_and_json_persistence(tmp_path: Path) -> None:
@@ -226,6 +232,134 @@ def test_periodic_artifact_selection_includes_first_and_interval() -> None:
     assert should_emit_episode_artifact(9, 10)
     with pytest.raises(ValueError):
         should_emit_episode_artifact(0, 0)
+
+
+def test_artifact_episode_selection_supports_random_periodic_and_all() -> None:
+    episodes = list(range(10))
+
+    random_first = select_artifact_episode_indices(
+        episodes,
+        selection="random",
+        count=5,
+        seed=123,
+        every_episodes=10,
+    )
+    random_second = select_artifact_episode_indices(
+        episodes,
+        selection="random",
+        count=5,
+        seed=123,
+        every_episodes=10,
+    )
+    periodic = select_artifact_episode_indices(
+        episodes,
+        selection="periodic",
+        count=5,
+        seed=123,
+        every_episodes=4,
+    )
+    all_episodes = select_artifact_episode_indices(
+        episodes,
+        selection="all",
+        count=5,
+        seed=123,
+        every_episodes=10,
+    )
+
+    assert random_first == random_second
+    assert len(random_first) == 5
+    assert len(set(random_first)) == 5
+    assert periodic == [0, 3, 7]
+    assert all_episodes == episodes
+
+
+def test_artifact_selection_summary_records_episode_indices_and_seeds() -> None:
+    specs = [
+        RolloutSpec(
+            output_index=idx,
+            seed=20000 + idx,
+            source="dataset",
+            dataset_episode_index=idx,
+        )
+        for idx in range(4)
+    ]
+    args = type(
+        "Args",
+        (),
+        {
+            "artifact_selection": "random",
+            "artifact_episode_count": 2,
+            "artifact_selection_seed": 123,
+        },
+    )()
+
+    summary = _artifact_selection_summary(
+        specs,
+        video_episode_indices={1, 3},
+        rerun_episode_indices={3},
+        args=args,
+    )
+
+    assert summary["selection"] == "random"
+    assert [row["dataset_episode_index"] for row in summary["video"]] == [1, 3]
+    assert [row["seed"] for row in summary["rerun"]] == [20003]
+
+
+def test_eval_artifact_selection_seed_defaults_to_run_seed(tmp_path: Path) -> None:
+    args = parse_eval_args(
+        [
+            "--checkpoint",
+            str(tmp_path / "policy.pt"),
+            "--dataset",
+            str(tmp_path / "dataset.zarr"),
+            "--output-dir",
+            str(tmp_path / "eval"),
+            "--seed",
+            "13",
+        ]
+    )
+
+    assert args.artifact_selection == "periodic"
+    assert args.artifact_episode_count == 5
+    assert args.artifact_selection_seed == 13
+
+
+def test_eval_constraint_overlay_flags_parse_and_validate(tmp_path: Path) -> None:
+    args = parse_eval_args(
+        [
+            "--checkpoint",
+            str(tmp_path / "policy.pt"),
+            "--dataset",
+            str(tmp_path / "dataset.zarr"),
+            "--output-dir",
+            str(tmp_path / "eval"),
+            "--no-constraint-overlay-video",
+            "--constraint-overlay-alpha",
+            "0.4",
+            "--constraint-overlay-color",
+            "0.8",
+            "0.2",
+            "0.1",
+        ]
+    )
+
+    assert args.constraint_overlay_video is False
+    assert args.constraint_overlay_alpha == pytest.approx(0.4)
+    assert args.constraint_overlay_color == [0.8, 0.2, 0.1]
+
+    with pytest.raises(ValueError, match="constraint-overlay-alpha"):
+        parse_eval_args(
+            [
+                "--checkpoint",
+                str(tmp_path / "policy.pt"),
+                "--dataset",
+                str(tmp_path / "dataset.zarr"),
+                "--output-dir",
+                str(tmp_path / "eval"),
+                "--constraint-overlay-alpha",
+                "1.5",
+            ]
+        )
 
 
 def test_progress_series_tracks_cumulative_metrics() -> None:

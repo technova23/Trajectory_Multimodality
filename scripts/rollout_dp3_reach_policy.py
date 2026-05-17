@@ -527,6 +527,42 @@ def select_mixed_rollout_specs(
     return specs
 
 
+def select_random_dataset_rollout_specs(
+    *,
+    dataset_episode_seeds: list[int],
+    total_count: int,
+    seed: int,
+) -> list[RolloutSpec]:
+    """Select a deterministic random subset of dataset episodes for validation rollouts."""
+    if total_count <= 0:
+        raise ValueError("total_count must be positive")
+    if not dataset_episode_seeds:
+        return []
+    count = min(total_count, len(dataset_episode_seeds))
+    rng = np.random.default_rng(seed)
+    selected = np.sort(
+        rng.choice(len(dataset_episode_seeds), size=count, replace=False)
+    )
+    return [
+        RolloutSpec(
+            output_index=output_idx,
+            seed=int(dataset_episode_seeds[int(dataset_idx)]),
+            source="dataset",
+            dataset_episode_index=int(dataset_idx),
+        )
+        for output_idx, dataset_idx in enumerate(selected)
+    ]
+
+
+def rollout_spec_video_stem(spec: RolloutSpec, *, validation: bool = False) -> str:
+    """Return a stable video stem that includes dataset identity when available."""
+    if validation and spec.dataset_episode_index is not None:
+        return f"validation_episode_{spec.dataset_episode_index:03d}_seed_{spec.seed}"
+    if spec.dataset_episode_index is not None:
+        return f"{spec.source}_{spec.dataset_episode_index:03d}_seed_{spec.seed}"
+    return f"{spec.source}_{spec.output_index:03d}_seed_{spec.seed}"
+
+
 def save_video(path: Path, frames: list[np.ndarray], *, fps: int) -> None:
     if not frames:
         raise RuntimeError("no frames were captured for video export")
@@ -536,7 +572,12 @@ def save_video(path: Path, frames: list[np.ndarray], *, fps: int) -> None:
     imageio.mimsave(path, frames, fps=fps)
 
 
-def save_rerun_timeline(path: Path, timeline: list[dict[str, np.ndarray | bool | float]]) -> None:
+def save_rerun_timeline(
+    path: Path,
+    timeline: list[dict[str, np.ndarray | bool | float]],
+    *,
+    constraints: list[object] | None = None,
+) -> None:
     try:
         import rerun as rr
     except Exception as exc:
@@ -548,6 +589,16 @@ def save_rerun_timeline(path: Path, timeline: list[dict[str, np.ndarray | bool |
     path.parent.mkdir(parents=True, exist_ok=True)
     rr.init("pg3d_dp3_reach_policy_rollout", spawn=False)
     rr.save(str(path))
+    if constraints:
+        from pg3d.viz.constraints import avoid_region_line_visuals
+
+        rr.set_time_sequence("step", 0)
+        for visual in avoid_region_line_visuals(constraints):
+            rr.log(
+                f"world/constraints/{visual.name}",
+                rr.LineStrips3D(visual.line_strips, colors=visual.color),
+                static=True,
+            )
     for step_idx, entry in enumerate(timeline):
         rr.set_time_sequence("step", step_idx)
         valid = np.asarray(entry["point_valid_mask"], dtype=bool)
