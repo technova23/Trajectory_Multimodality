@@ -25,7 +25,7 @@ Constraints:
 Tasks:
 1. Inspect the pg3d-native DP3 policy core and relevant DP3 reference patterns.
 2. Add the minimal generic dataset loader/config needed for ManiSkill reach action chunks.
-3. Add a training config or script for Reach-Narrow.
+3. Add a training config or script for Reach-Narrow. Add training visualizations for useful metrics on wandb.
 4. Add an evaluation adapter/script stub if needed.
 5. Document exact training/eval commands in `docs/runbooks/commands.md`.
 6. Update `docs/status.md` and worklog.
