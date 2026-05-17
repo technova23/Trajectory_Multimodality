@@ -10,10 +10,10 @@ RTX 5090 / CUDA 12.9 path:
 uv sync --extra cu129 --group dev
 ```
 
-RTX 5090 / CUDA 12.9 path with RLBench:
+RTX 5090 / CUDA 12.9 path with ManiSkill:
 
 ```bash
-uv sync --extra cu129 --extra rlbench --group dev
+uv sync --extra cu129 --extra maniskill --group dev --group notebooks
 ```
 
 CPU/debug path:
@@ -22,10 +22,10 @@ CPU/debug path:
 uv sync --extra cpu --group dev
 ```
 
-CPU/debug path with RLBench:
+CPU/debug path with ManiSkill:
 
 ```bash
-uv sync --extra cpu --extra rlbench --group dev
+uv sync --extra cpu --extra maniskill --group dev
 ```
 
 ## Basic checks
@@ -35,6 +35,7 @@ make test
 make lint
 make smoke
 make gpu-check
+make maniskill-check
 ```
 
 Equivalent direct commands:
@@ -44,6 +45,7 @@ uv run pytest
 uv run ruff check .
 uv run python scripts/smoke_imports.py
 uv run python scripts/check_gpu.py
+uv run python scripts/check_maniskill.py
 ```
 
 ## DP3 policy smoke
@@ -75,25 +77,16 @@ cd pg3d
 uv sync --extra cu129 --group dev
 ```
 
-## RLBench/PyRep smoke
+## ManiSkill smoke
 
-First configure CoppeliaSim as described in `docs/runbooks/rlbench_setup.md`, then run:
-
-```bash
-uv run python scripts/rlbench_smoke_reach.py --headless false
-uv run python scripts/rlbench_smoke_reach.py --headless true
-```
-
-Save one adapted ReachTarget observation bundle:
+First install the optional extra as described in `docs/runbooks/maniskill_setup.md`, then run:
 
 ```bash
-uv run python scripts/rlbench_save_observation.py --headless true \
-  --output-dir artifacts/rlbench_observation \
-  --visualize true
+uv run python scripts/check_maniskill.py
+make maniskill-check
 ```
 
-The bundle contains `summary.json`, `observation.npz`, and, with `--visualize true`,
-`observation.mp4`.
+The default smoke uses `PickCube-v1` with `obs_mode="state"` and no rendering.
 
 ## W&B
 

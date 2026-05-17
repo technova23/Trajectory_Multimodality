@@ -8,7 +8,7 @@ import pg3d
 
 PLANNED_PACKAGES = [
     "pg3d.envs",
-    "pg3d.envs.rlbench_adapter",
+    "pg3d.envs.maniskill_adapter",
     "pg3d.policies",
     "pg3d.world_model",
     "pg3d.constraints",
@@ -30,13 +30,14 @@ def test_planned_packages_import_without_sim_dependencies() -> None:
         importlib.import_module(package)
 
 
-def test_rlbench_adapter_import_keeps_rlbench_lazy() -> None:
+def test_maniskill_adapter_import_keeps_simulator_lazy() -> None:
     code = """
 import importlib
 import sys
 
-importlib.import_module("pg3d.envs.rlbench_adapter")
-assert "rlbench" not in sys.modules
-assert "pyrep" not in sys.modules
+importlib.import_module("pg3d.envs.maniskill_adapter")
+assert "mani_skill" not in sys.modules
+assert "sapien" not in sys.modules
+assert "gymnasium" not in sys.modules
 """
     subprocess.run([sys.executable, "-c", code], check=True)

@@ -5,6 +5,7 @@ CODE REVIEW: Review the current uncommitted diff before I accept-and-commit or r
 
 Read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/review_checklist.md`
 - current git diff
 

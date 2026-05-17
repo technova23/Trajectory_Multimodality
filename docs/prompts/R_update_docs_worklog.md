@@ -5,6 +5,7 @@ Update project docs after the current coding session.
 
 Read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/status.md`
 - recent git diff
 

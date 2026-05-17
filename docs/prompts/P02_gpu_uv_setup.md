@@ -5,6 +5,7 @@ Validate the pg3d uv environment on an RTX 5090 workstation.
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/runbooks/setup_workstation.md`
 - `docs/runbooks/commands.md`
 - `docs/adr/0006-python-uv-cuda-stack.md`

@@ -5,6 +5,7 @@ Implement the first composition operators for constrained reach: rejection/filte
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/milestones.md` M6
 - `docs/architecture/system_architecture.md`
 - `docs/research_brief.md`
@@ -26,4 +27,4 @@ Tasks:
 
 Done when:
 - Tests show the reranker selects the safe candidate in a synthetic reach scenario.
-- API is ready to connect to DP3/RLBench.
+- API is ready to connect to DP3/ManiSkill.

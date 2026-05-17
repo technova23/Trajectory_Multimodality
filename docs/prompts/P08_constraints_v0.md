@@ -5,6 +5,7 @@ Implement handwritten constraint objects for reach: `AvoidRegion(target="eef")`,
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/milestones.md` M5
 - `docs/architecture/system_architecture.md`
 - `docs/research_brief.md`

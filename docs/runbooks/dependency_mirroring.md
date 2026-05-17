@@ -13,8 +13,7 @@ Required now:
 
 Optional only if we patch them:
 
-- RLBench -> private mirror or pinned git dependency.
-- PyRep -> private mirror or pinned git dependency.
+- ManiSkill/SAPIEN -> private mirror or pinned dependency.
 
 Do not mirror every dependency by default. Mirror only when we need to patch or pin fragile code.
 

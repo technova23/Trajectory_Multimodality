@@ -8,8 +8,8 @@ Accepted
 
 ## Context
 
-The ReachTarget MVP needs one RLBench observation to feed later DP3-style policy code, dataset
-writers, and the kinematic world model. The same simulator observation also contains fields that
+The ManiSkill reach MVP needs observations to feed later DP3-style policy code, dataset
+writers, and the kinematic world model. The same simulator observation can also contain fields that
 should not become default policy inputs: target positions, raw simulator object handles, and named
 object masks.
 
@@ -30,24 +30,24 @@ Use typed dataclasses for the initial observation boundary:
 conventions. Optional RGB may be carried as `point_features["rgb"]` with `uint8 [N, 3]`; color use is
 opt-in.
 
-`RobotState.as_agent_pos()` returns joint positions only for the first ReachTarget/DP3 adapter. Other
+`RobotState.as_agent_pos()` returns joint positions only for the first reach/DP3 adapter. Other
 proprioceptive fields remain available for logging and future adapters, but they are not implicitly
 added to policy inputs.
 
 Keep evaluation-only simulator context separate:
 
 - `Observation.sim_gt` holds `SimGroundTruth`, including `target_position`.
-- `point_features["instance_id"]` may hold raw RLBench object handle ids for debugging/artifacts, but
+- `point_features["segmentation"]` or `point_features["instance_id"]` may hold raw simulator
+  segmentation ids for debugging/artifacts, but
   is not a default policy input.
 - `Observation.object_masks` may hold named masks such as `target` for evaluation/debugging, but
   named object masks are not default policy inputs.
 
-Make `Observation.robot_mask` a first-class optional `bool [N]` mask. The real ReachTarget save smoke
-requires it by default and exposes `--allow-missing-robot-mask` only for setup debugging. Future
-dataset writing should preserve the mask separately from policy-visible arrays.
+Make `Observation.robot_mask` a first-class optional `bool [N]` mask. Future dataset writing should
+preserve the mask separately from policy-visible arrays.
 
-Force and gripper-touch-force fields stay optional in `RobotState`. CoppeliaSim may not have
-first-frame values available, and the observation adapter should not require those fields.
+Simulator-specific force/contact fields stay optional in `RobotState`. The observation adapter
+should not require those fields for the first reach path.
 
 ## Consequences
 
@@ -62,7 +62,7 @@ inputs. They should not flatten the whole `Observation` object into a training i
 
 ## Alternatives considered
 
-- Pass through raw RLBench observations. This was rejected because the policy/evaluation boundary
+- Pass through raw simulator observations. This was rejected because the policy/evaluation boundary
   would be implicit and easy to violate.
 - Make target position policy-visible for reach. This was rejected because it would hide whether the
   point-cloud policy can solve the intended observation problem.

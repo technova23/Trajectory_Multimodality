@@ -12,7 +12,7 @@ Pick-and-place is scientifically important but adds grasping, contact, object at
 
 ## Decision
 
-The first MVP will use RLBench reach before pick-and-place. The initial task is RLBench `ReachTarget` or a narrowed/custom variant of it. The first constraint is `avoid_region` over the end-effector path.
+The first MVP will use ManiSkill reach before pick-and-place. The initial path is a built-in ManiSkill smoke task followed by a narrowed/custom reach task if needed. The first constraint is `avoid_region` over the end-effector path.
 
 ## Consequences
 

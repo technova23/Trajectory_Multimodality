@@ -5,10 +5,11 @@ Create the evaluation scaffold for the first MVP: base DP3 vs rejection vs world
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/milestones.md` M7
 - `docs/research_brief.md`
 - `docs/architecture/system_architecture.md`
-- Existing RLBench adapter, DP3 adapter, world model, constraints, and controllers.
+- Existing ManiSkill adapter, DP3 adapter, world model, constraints, and controllers.
 
 Constraints:
 - Fixed seeds and small trial counts first.

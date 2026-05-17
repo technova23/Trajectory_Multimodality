@@ -4,7 +4,8 @@ Date: 2026-05-16
 
 ## Status
 
-Accepted
+Superseded by ADR 0002. Historical context only; RLBench/PyRep/CoppeliaSim are no longer active
+pg3d dependencies or backends.
 
 ## Context
 

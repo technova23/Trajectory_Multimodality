@@ -8,13 +8,14 @@ Paste the exact command, output, traceback, and relevant environment details her
 
 Read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/runbooks/commands.md`
 - relevant ADRs and modules
 
 Constraints:
 - Reproduce the failure first if possible.
 - Make the smallest fix that explains the failure.
-- Do not change Python/Torch/RLBench versions without documenting why.
+- Do not change Python/Torch/ManiSkill/SAPIEN versions without documenting why.
 - Update the relevant runbook if this is an environment/setup issue.
 
 Tasks:

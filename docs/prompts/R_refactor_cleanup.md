@@ -5,6 +5,7 @@ Run a focused cleanup pass without changing scientific behavior.
 
 Read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/refactor_policy.md`
 - `docs/status.md`
 - current repo tree and git status

@@ -50,20 +50,12 @@ def _array_summary(array: Array) -> dict[str, Any]:
 
 @dataclass
 class RobotState:
-    """Robot proprioception extracted from an environment observation.
-
-    The first DP3 reach adapter exposes joint positions as ``agent_pos``. Other
-    fields are retained for logging, debugging, and later world-model checks.
-    """
+    """Robot proprioception extracted from a ManiSkill observation."""
 
     joint_positions: Array
     joint_velocities: Array | None = None
-    joint_forces: Array | None = None
     gripper_open: float | None = None
-    gripper_pose: Array | None = None
-    gripper_matrix: Array | None = None
-    gripper_joint_positions: Array | None = None
-    gripper_touch_forces: Array | None = None
+    tcp_pose: Array | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -73,32 +65,12 @@ class RobotState:
         self.joint_velocities = _optional_array(
             self.joint_velocities, name="joint_velocities", dtype=np.float32, ndim=1
         )
-        self.joint_forces = _optional_array(
-            self.joint_forces, name="joint_forces", dtype=np.float32, ndim=1
-        )
-        self.gripper_pose = _optional_array(
-            self.gripper_pose, name="gripper_pose", dtype=np.float32, ndim=1
-        )
-        self.gripper_matrix = _optional_array(
-            self.gripper_matrix, name="gripper_matrix", dtype=np.float32, ndim=2
-        )
-        self.gripper_joint_positions = _optional_array(
-            self.gripper_joint_positions,
-            name="gripper_joint_positions",
-            dtype=np.float32,
-            ndim=1,
-        )
-        self.gripper_touch_forces = _optional_array(
-            self.gripper_touch_forces,
-            name="gripper_touch_forces",
-            dtype=np.float32,
-            ndim=1,
-        )
+        self.tcp_pose = _optional_array(self.tcp_pose, name="tcp_pose", dtype=np.float32, ndim=1)
         if self.gripper_open is not None:
             self.gripper_open = float(self.gripper_open)
 
     def as_agent_pos(self) -> Array:
-        """Return the policy-visible low-dimensional state for DP3."""
+        """Return the default DP3-visible low-dimensional state."""
         return self.joint_positions.astype(np.float32, copy=True)
 
     def summary(self) -> dict[str, Any]:
@@ -106,17 +78,10 @@ class RobotState:
             "joint_positions": _array_summary(self.joint_positions),
             "metadata": dict(self.metadata),
         }
-        for name in (
-            "joint_velocities",
-            "joint_forces",
-            "gripper_pose",
-            "gripper_matrix",
-            "gripper_joint_positions",
-            "gripper_touch_forces",
-        ):
-            value = getattr(self, name)
-            if value is not None:
-                data[name] = _array_summary(value)
+        if self.joint_velocities is not None:
+            data["joint_velocities"] = _array_summary(self.joint_velocities)
+        if self.tcp_pose is not None:
+            data["tcp_pose"] = _array_summary(self.tcp_pose)
         if self.gripper_open is not None:
             data["gripper_open"] = self.gripper_open
         return data
@@ -128,8 +93,7 @@ class SimGroundTruth:
 
     task_name: str
     target_position: Array | None = None
-    task_low_dim_state: Array | None = None
-    descriptions: tuple[str, ...] = ()
+    success: bool | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -141,21 +105,18 @@ class SimGroundTruth:
                 "target_position must have shape (3,), "
                 f"got {self.target_position.shape}"
             )
-        self.task_low_dim_state = _optional_array(
-            self.task_low_dim_state, name="task_low_dim_state", dtype=np.float32, ndim=1
-        )
-        self.descriptions = tuple(str(description) for description in self.descriptions)
+        if self.success is not None:
+            self.success = bool(self.success)
 
     def summary(self) -> dict[str, Any]:
         data: dict[str, Any] = {
             "task_name": self.task_name,
-            "descriptions": list(self.descriptions),
             "metadata": dict(self.metadata),
         }
         if self.target_position is not None:
             data["target_position"] = self.target_position.astype(float).tolist()
-        if self.task_low_dim_state is not None:
-            data["task_low_dim_state"] = _array_summary(self.task_low_dim_state)
+        if self.success is not None:
+            data["success"] = self.success
         return data
 
 
@@ -209,11 +170,7 @@ class Observation:
         return mask
 
     def as_policy_inputs(self, *, include_rgb: bool = False) -> dict[str, Array]:
-        """Return the default DP3-visible observation dictionary.
-
-        Simulator ground truth, instance ids, and named object masks are excluded.
-        RGB is opt-in because the current DP3 smoke path uses XYZ-only point clouds.
-        """
+        """Return the default DP3-visible observation dictionary."""
         point_cloud = self.point_cloud
         if include_rgb and "rgb" in self.point_features:
             rgb = self.point_features["rgb"].astype(np.float32)

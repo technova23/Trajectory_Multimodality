@@ -1,10 +1,11 @@
-# Prompt P06 — DP3 integration for RLBench ReachTarget
+# Prompt P06 — DP3 integration for ManiSkill reach
 
 Goal:
-Integrate the pg3d-native DP3 policy core with the pg3d ReachTarget dataset.
+Integrate the pg3d-native DP3 policy core with the pg3d ManiSkill reach dataset.
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/milestones.md` M3
 - `docs/adr/0003-dp3-p0-policy.md`
 - `docs/adr/0004-action-representation.md`
@@ -21,12 +22,12 @@ Constraints:
 
 Tasks:
 1. Inspect the pg3d-native DP3 policy core and relevant DP3 reference patterns.
-2. Add the minimal generic dataset loader/config needed for ReachTarget action chunks.
+2. Add the minimal generic dataset loader/config needed for ManiSkill reach action chunks.
 3. Add a training config or script for Reach-Narrow.
 4. Add an evaluation adapter/script stub if needed.
 5. Document exact training/eval commands in `docs/runbooks/commands.md`.
 6. Update `docs/status.md` and worklog.
 
 Done when:
-- DP3 can load the ReachTarget dataset and start a smoke training step.
+- DP3 can load the ManiSkill reach dataset and start a smoke training step.
 - Runtime imports come from `pg3d.policies.dp3`.

@@ -12,7 +12,7 @@ The target workstation has an RTX 5090. Older DP3 instructions target older CUDA
 
 ## Decision
 
-Use uv with Python 3.11 for the main pg3d environment. Target PyTorch CUDA 12.9 for RTX 5090 because CUDA 12.9 is installed on the workstation. If PyRep/RLBench/DP3 force Python 3.10 or a split environment, document it in a new ADR before changing.
+Use uv with Python 3.11 for the main pg3d environment. Target PyTorch CUDA 12.9 for RTX 5090 because CUDA 12.9 is installed on the workstation. If ManiSkill, SAPIEN, or DP3 force Python 3.10 or a split environment, document it in a new ADR before changing.
 
 ## Consequences
 

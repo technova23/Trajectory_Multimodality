@@ -13,6 +13,8 @@ FORBIDDEN_MODULES = [
     "mujoco_py",
     "numba",
     "pytorch3d",
+    "mani_skill",
+    "sapien",
 ]
 
 

@@ -12,7 +12,7 @@ mods = [
     "wandb",
     "pg3d",
     "pg3d.policies.dp3",
-    "pg3d.envs.rlbench_adapter",
+    "pg3d.envs.maniskill_adapter",
     "pg3d.policies",
     "pg3d.world_model",
     "pg3d.constraints",

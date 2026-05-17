@@ -19,7 +19,7 @@ Every task prompt should specify:
 
 ## 4. Keep one thread per task
 
-Do not run one giant Codex thread for the whole project. Use separate threads/worktrees for repo bootstrap, RLBench setup, DP3 integration, world model, constraints, reranking, and eval.
+Do not run one giant Codex thread for the whole project. Use separate threads/worktrees for repo bootstrap, ManiSkill setup, DP3 integration, world model, constraints, reranking, and eval.
 
 ## 5. Keep docs current
 
@@ -50,8 +50,8 @@ After each milestone, ask Codex to do a cleanup pass with `docs/prompts/R_refact
 
 ## 9. Treat dependency changes as design decisions
 
-Changing Python, PyTorch, CUDA, RLBench, PyRep, or DP3 versions can invalidate previous setup work. Record these changes in runbooks and, if durable, ADRs.
+Changing Python, PyTorch, CUDA, ManiSkill, SAPIEN, or DP3 versions can invalidate previous setup work. Record these changes in runbooks and, if durable, ADRs.
 
 ## 10. Keep simulator/policy dependencies lazy
 
-Pure tests should run without RLBench, PyRep, CoppeliaSim, or DP3 installed. This keeps Codex able to verify geometry and controller code in lightweight environments.
+Pure tests should run without ManiSkill, SAPIEN, rendering/GPU simulator dependencies, or DP3 installed. This keeps Codex able to verify geometry and controller code in lightweight environments.

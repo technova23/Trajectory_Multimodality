@@ -5,7 +5,7 @@
 ```text
 pg3d/
   envs/
-    rlbench_adapter/        # simulator-specific wrappers and data collection
+    maniskill_adapter/      # simulator-specific wrappers and data collection
   policies/                 # policy interface and DP3 adapter
     dp3/                    # pg3d-native, simulation-free DP3 policy core
   world_model/              # kinematic point-cloud imagination
@@ -18,14 +18,15 @@ pg3d/
   utils/
 ```
 
-Keep simulator and policy dependencies lazy. Importing `pg3d` should not require RLBench, PyRep,
-CoppeliaSim, or DP3. DP3 runtime imports should use `pg3d.policies.dp3`; the private
+Keep simulator and policy dependencies lazy. Importing `pg3d` should not require ManiSkill,
+SAPIEN, rendering/GPU simulator dependencies, or DP3. DP3 runtime imports should use
+`pg3d.policies.dp3`; the private
 `external/dp3` submodule is reference material during migration and should not be imported by
 pg3d runtime code.
 
 ## DP3 policy slice
 
-The pg3d-native DP3 slice keeps only the model and training primitives needed for the RLBench
+The pg3d-native DP3 slice keeps only the model and training primitives needed for the ManiSkill
 reach MVP:
 
 - point-cloud/state encoder,
@@ -60,14 +61,15 @@ Current shape conventions:
 - `point_cloud`: `float32 [N, 3]`, finite XYZ world points, DP3-visible.
 - `point_features["rgb"]`: optional `uint8 [N, 3]`; DP3 color use is opt-in.
 - `point_features["camera_index"]`: `int16 [N]`, camera provenance for debugging/artifacts.
-- `point_features["instance_id"]`: optional `int64 [N]` raw RLBench object handle ids; do not feed
+- `point_features["segmentation"]` or `point_features["instance_id"]`: optional `int64 [N]`
+  simulator segmentation ids; do not feed
   this to policies by default.
-- `robot_mask`: optional `bool [N]` derived from simulator object handles; required by the real
-  ReachTarget save smoke because the world model needs robot-point removal.
-- `object_masks`: optional named `bool [N]` masks for eval/debug, such as ReachTarget `target` and
+- `robot_mask`: optional `bool [N]` derived from simulator segmentation; required by the
+  world model for robot-point removal.
+- `object_masks`: optional named `bool [N]` masks for eval/debug, such as reach `target` and
   distractors. These are not policy inputs by default.
 - `RobotState.as_agent_pos()`: joint positions only for the first DP3 reach adapter.
-- `SimGroundTruth.target_position`: optional `float32 [3]` from ReachTarget low-dimensional task
+- `SimGroundTruth.target_position`: optional `float32 [3]` from ManiSkill task state/info
   state; eval/debug only.
 
 ### ActionChunk
@@ -110,13 +112,13 @@ Start with Python objects, but every constraint instance should be JSON-serializ
 ## P0 data flow
 
 ```text
-RLBench observation
+ManiSkill observation
   -> ObservationAdapter
   -> DP3 policy samples K ActionChunks
   -> GeometricWorldModel imagines each chunk
   -> ConstraintProgram scores each imagined rollout
   -> RerankingController selects chunk
-  -> RLBench executes first chunk / first action horizon
+  -> ManiSkill executes first chunk / first action horizon
   -> repeat
 ```
 

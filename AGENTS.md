@@ -6,7 +6,7 @@ This file is the durable operating guide for Codex and other coding agents worki
 
 `pg3d` studies programmatic geometric guidance for 3D diffusion robot policies. The initial proof of concept is simulation-only:
 
-1. Train/adapt a DP3-style point-cloud diffusion policy on RLBench `ReachTarget` demonstrations.
+1. Train/adapt a DP3-style point-cloud diffusion policy on ManiSkill reach demonstrations.
 2. Build a kinematic robot-geometry point-cloud world model that imagines future robot point clouds from candidate joint-action chunks.
 3. Score handwritten geometric constraints such as `avoid_region` over imagined rollouts.
 4. Use candidate rejection/reranking in receding horizon mode to improve combined task-and-constraint success.
@@ -19,6 +19,7 @@ Real robot/xArm code is out of scope for now. Keep interfaces robot-agnostic, bu
 Start every substantial task by reading:
 
 - `docs/status.md` — current state and immediate priorities.
+- `docs/project_proposal.html` — current research/source-of-truth proposal. Do not skip it.
 - `docs/milestones.md` — staged research milestones.
 - `docs/architecture/system_architecture.md` — package/module design.
 - `docs/adr/` — design decisions that should not be silently changed.
@@ -32,7 +33,7 @@ When working on a specific milestone, also read the corresponding file in `docs/
 - Keep modules small and readable. Avoid clever abstractions unless the milestone needs them. Use type hints, docstrings, and comments where they clarify non-obvious research code.
 - Use typed dataclasses or Pydantic models for shared objects like observations, action chunks, constraints, rollouts, and metrics.
 - Do not add heavy dependencies casually. If a dependency is needed, document why in the work log.
-- Do not import RLBench, PyRep, or DP3 at package import time. Keep simulator/policy dependencies lazy so CPU-only tests can run.
+- Do not import ManiSkill, SAPIEN, rendering/GPU simulator dependencies, or DP3 at package import time. Keep simulator/policy dependencies lazy so CPU-only tests can run.
 - Do not modify submodules unless the task explicitly says to do so.
 - Do not run long training jobs unless explicitly asked. Create scripts/configs and run smoke-scale checks.
 - Keep W&B integration configurable and offline-friendly.
@@ -47,11 +48,12 @@ When working on a specific milestone, also read the corresponding file in `docs/
 Common commands:
 
 ```bash
-uv sync --extra cu129 --group dev
+uv sync --extra cu129 --extra maniskill --group dev --group notebooks
 make test
 make lint
 make gpu-check
 make smoke
+make maniskill-check
 ```
 
 If a command changes, update `docs/runbooks/commands.md` in the same commit.
@@ -77,7 +79,7 @@ Use tests for high-leverage correctness, not for professional-software overkill.
 - world-model FK/point-cloud compositor sanity,
 - dataset writer schema validation.
 
-For simulator-dependent code, provide smoke scripts and skip tests gracefully when RLBench/CoppeliaSim are unavailable.
+For simulator-dependent code, provide smoke scripts and skip tests gracefully when ManiSkill/SAPIEN or rendering support are unavailable.
 
 ## Refactor policy
 

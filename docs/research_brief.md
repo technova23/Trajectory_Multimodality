@@ -23,7 +23,7 @@ The first world model is not learned. It is a geometry/kinematics compositor tha
 
 ## P0 MVP definition
 
-A DP3-style point-cloud diffusion policy trained on nominal RLBench reach demonstrations is evaluated with an unseen keep-out region. At inference time, pg3d samples candidate action chunks, uses the robot-geometry point-cloud world model to imagine future end-effector/robot motion, evaluates a handwritten `avoid_region` constraint, and reranks candidates in receding-horizon mode. Success means improved combined reach-and-constraint success over base DP3 and simple rejection/filtering, with clear visualizations of imagined rollouts.
+A DP3-style point-cloud diffusion policy trained on nominal ManiSkill reach demonstrations is evaluated with an unseen keep-out region. At inference time, pg3d samples candidate action chunks, uses the robot-geometry point-cloud world model to imagine future end-effector/robot motion, evaluates a handwritten `avoid_region` constraint, and reranks candidates in receding-horizon mode. Success means improved combined reach-and-constraint success over base DP3 and simple rejection/filtering, with clear visualizations of imagined rollouts.
 
 ## What not to implement yet
 

@@ -1,13 +1,13 @@
 # pg3d status
 
-Last updated: 2026-05-16
+Last updated: 2026-05-17
 
 ## Current objective
 
-Bootstrap a sim-only research codebase for programmatic geometric guidance of 3D diffusion policies. The first MVP is constrained reaching in RLBench:
+Bootstrap a sim-only research codebase for programmatic geometric guidance of 3D diffusion policies. The first MVP is constrained reaching in ManiSkill/SAPIEN:
 
 - base policy: DP3-style point-cloud diffusion policy,
-- simulator: RLBench `ReachTarget`, possibly narrowed/customized,
+- simulator: ManiSkill/SAPIEN, starting with built-in task smoke and then a narrow reach task if needed,
 - action representation: start with absolute joint target chunks; keep delta joint chunks as fallback,
 - world model: kinematic robot-geometry point-cloud imagination from joint-action chunks,
 - first constraint: `avoid_region` over the end-effector path,
@@ -15,20 +15,18 @@ Bootstrap a sim-only research codebase for programmatic geometric guidance of 3D
 
 ## Current phase
 
-M1 RLBench ReachTarget smoke and observation adapter. The repo has a pg3d-native simulation-free
-DP3 slice under `pg3d/policies/dp3` with synthetic import, inference, and training-step smoke
-tests. RLBench is tracked as an optional uv extra rather than a submodule. The ReachTarget smoke and
-observation-save scripts fail early with actionable setup errors when RLBench, PyRep, or
-CoppeliaSim are missing, and the observation-save path is validated on CoppeliaSim 4.9.0 rev6.
+Simulator migration to ManiSkill/SAPIEN is complete in the active code path. The repo has a
+pg3d-native simulation-free DP3 slice under `pg3d/policies/dp3` with synthetic import, inference,
+and training-step smoke tests. ManiSkill is tracked as a pinned optional uv extra, while base `pg3d`
+imports stay simulator-free. A small non-rendering ManiSkill smoke script validates a built-in
+`PickCube-v1` environment before the custom reach adapter is implemented.
 
 ## Immediate next steps
 
-1. Use the local CoppeliaSim 4.9.0 rev6 install and run
-   `uv sync --extra cu129 --extra rlbench --group dev`.
-2. Run `uv run python scripts/rlbench_smoke_reach.py --headless true` on the workstation.
-3. Run `uv run python scripts/rlbench_save_observation.py --headless true --visualize true` on the
-   workstation and inspect the saved robot mask/video artifact.
-4. Extend the RLBench observation adapter into the M2 dataset writer.
+1. Run `uv sync --extra cu129 --extra maniskill --group dev --group notebooks`.
+2. Run `uv run python scripts/check_maniskill.py` on the workstation.
+3. Implement the P04 ManiSkill observation adapter for state and point-cloud observations.
+4. Extend the ManiSkill adapter into the P05 reach/custom-task dataset writer.
 5. Extend the pg3d-native DP3 slice from synthetic smoke tests to a generic zarr dataset and
    one-step trainer smoke.
 
@@ -36,26 +34,21 @@ CoppeliaSim are missing, and the observation-save path is validated on CoppeliaS
 
 - DP3 upstream was designed around older Python/CUDA assumptions; pg3d now ports only the
   simulation-free model core and avoids upstream benchmark dependencies.
-- RLBench/PyRep/CoppeliaSim installation may constrain Python version or require system-package fixes.
-- CoppeliaSim 4.9.0 rev6 works for observation-only smoke/save through pg3d compatibility shims,
-  but live RLBench demo generation is still not supported on 4.9 because upstream path/IK APIs were
-  removed.
-- Upstream RLBench currently needs `gymnasium==1.0.0a2` for runtime imports even though it declares
-  that dependency under its own `gym` extra; pg3d pins it in the `rlbench` optional extra.
+- ManiSkill v3 is a fast-moving stack; keep the adapter isolated and commands pinned in runbooks.
+- Rendering and point-cloud observation modes may require Vulkan/driver setup beyond the
+  non-rendering `obs_mode="state"` smoke.
 - Reach is useful for mechanism validation, but code-only planners may be strong; avoid over-claiming from reach-only results.
 - The kinematic point-cloud world model is the novel project pivot and should be validated visually early.
-- This Codex sandbox cannot see a CUDA device, but `make gpu-check` and the CUDA DP3 smoke pass
-  from the user's local pg3d terminal on the RTX 5090 workstation.
-- RLBench/PyRep/CoppeliaSim are not installed/configured in the current Codex environment, so the
-  ReachTarget smoke and observation-save scripts can only validate dependency reporting here until
-  workstation setup runs.
+- New clones and fresh virtualenvs must sync the `maniskill` optional extra before running
+  ManiSkill smoke checks.
 
 ## Decisions already made
 
 - Project/repo/package name: `pg3d` for now.
 - Sim-only for this phase; real robot hardware code is out of scope.
-- RLBench is the primary simulator.
-- RLBench should be installed as an optional uv dependency, not carried as a submodule.
+- ManiSkill/SAPIEN is the primary simulator.
+- RLBench/PyRep/CoppeliaSim are deprecated and removed from active dependencies/backends.
+- ManiSkill should be installed as an optional uv dependency, not carried as a submodule.
 - DP3 is the only base policy for P0; RISE is deferred.
 - DP3 runtime code should live in `pg3d/policies/dp3`; `external/dp3` is a temporary reference
   submodule during migration.
@@ -63,24 +56,18 @@ CoppeliaSim are missing, and the observation-save path is validated on CoppeliaS
 - Start with handwritten constraints; LLM-generated constraints are later.
 - Start with reranking/rejection; energy guidance is later.
 - Use W&B from day one, but keep offline/debug modes available.
-- Reach observations use typed pg3d dataclasses and keep policy-visible point clouds/agent state
+- ManiSkill observations use typed pg3d dataclasses and keep policy-visible point clouds/agent state
   separate from simulator ground truth and eval/debug masks.
-- Robot masks are first-class observation metadata and are required by the real ReachTarget save
-  smoke unless explicitly bypassed for setup debugging.
-- CoppeliaSim 4.9.0 rev6 is supported for observation-only smoke/save through pg3d compatibility
-  shims; live demo generation remains unsupported on 4.9 for now.
+- Robot masks are first-class observation metadata for the world model.
 
 ## Latest work log
 
 See `docs/worklog/`.
 
+- Simulator choice is recorded in `docs/adr/0002-maniskill-primary-simulator.md`.
 - Observation schema and mask policy are recorded in
   `docs/adr/0008-observation-schema-and-masks.md`.
-- CoppeliaSim 4.9.0 rev6 compatibility is recorded in
-  `docs/adr/0007-coppeliasim-49-rlbench-compat.md`.
-- `scripts/rlbench_save_observation.py --headless true` succeeded against the local 4.9.0 install
-  and saved 81,920 points with a robot mask.
-- `scripts/rlbench_save_observation.py --headless true --visualize true --video-frames 3`
-  succeeded and wrote `observation.mp4`.
-- `scripts/rlbench_smoke_reach.py --headless true --steps 0`, full `uv run pytest`, and full
-  `uv run ruff check .` passed.
+- Current canonical setup command:
+  `uv sync --extra cu129 --extra maniskill --group dev --group notebooks`.
+- Current validation: `uv lock --check`, `make smoke`, `make test`, `make lint`,
+  `make gpu-check`, and `make maniskill-check` pass on the RTX 5090 workstation environment.

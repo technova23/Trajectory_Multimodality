@@ -286,7 +286,7 @@ class PointNetEncoderXYZ(nn.Module):
     """Minimal PointNet encoder for XYZ point clouds.
 
     The initial pg3d DP3 slice deliberately supports only XYZ coordinates. Color
-    and richer point features can be added once RLBench observation conventions
+    and richer point features can be added once ManiSkill observation conventions
     are fixed.
     """
 

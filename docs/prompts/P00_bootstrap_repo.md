@@ -3,10 +3,11 @@
 You are working in the root of the `pg3d` repository.
 
 Goal:
-Bootstrap the repo scaffold for a sim-only research project on programmatic geometric guidance for 3D diffusion policies. The initial MVP is constrained RLBench reach with DP3, a kinematic point-cloud world model, and candidate reranking.
+Bootstrap the repo scaffold for a sim-only research project on programmatic geometric guidance for 3D diffusion policies. The initial MVP is constrained ManiSkill reach with DP3, a kinematic point-cloud world model, and candidate reranking.
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/status.md`
 - `docs/research_brief.md`
 - `docs/milestones.md`
@@ -19,7 +20,7 @@ Constraints:
 - Use `uv`, Python 3.11, and the existing `pyproject.toml` structure.
 - Keep this lightweight; do not add heavy simulator or policy dependencies yet.
 - Do not edit submodules in this task.
-- Do not implement RLBench/DP3 logic yet; just make the base repo clean and runnable.
+- Do not implement ManiSkill/DP3 logic yet; just make the base repo clean and runnable.
 
 Tasks:
 1. Inspect the scaffold and identify missing basic files.

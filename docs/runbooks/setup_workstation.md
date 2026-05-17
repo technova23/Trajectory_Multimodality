@@ -10,7 +10,7 @@ Install:
 - Git + Git LFS,
 - uv,
 - build-essential / compiler toolchain,
-- CoppeliaSim 4.9.0 rev6 for the current RLBench observation smoke path,
+- Vulkan-capable NVIDIA driver/runtime for later ManiSkill visual observations,
 - optional: tmux, htop, nvtop, ffmpeg.
 
 ## 2. Clone repo
@@ -48,19 +48,22 @@ Then verify the pg3d-native DP3 policy smoke:
 uv run python scripts/smoke_dp3_policy.py --device cuda
 ```
 
-## 4. CoppeliaSim/PyRep/RLBench
+## 4. ManiSkill
 
-Set environment variables after installing CoppeliaSim:
+Install the simulator optional extra:
 
 ```bash
-export COPPELIASIM_ROOT=/home/krishna/code/CoppeliaSim_Edu_V4_9_0_rev6_Ubuntu22_04
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COPPELIASIM_ROOT
-export QT_QPA_PLATFORM_PLUGIN_PATH=$COPPELIASIM_ROOT
+uv sync --extra cu129 --extra maniskill --group dev --group notebooks
 ```
 
-Persist them in your shell profile or `.envrc`.
+Optionally set an asset directory:
 
-Then follow `docs/runbooks/rlbench_setup.md` once filled in by M1.
+```bash
+export MS_ASSET_DIR=/path/to/maniskill_assets
+export MS_SKIP_ASSET_DOWNLOAD_PROMPT=1
+```
+
+Then follow `docs/runbooks/maniskill_setup.md`.
 
 ## 5. Verify repo
 
@@ -82,7 +85,7 @@ export WANDB_MODE=offline
 
 ## Notes
 
-- If PyRep or RLBench fails under Python 3.11, document the failure in `docs/status.md` and create an ADR before downgrading to Python 3.10 or splitting environments.
+- If ManiSkill/SAPIEN fails under Python 3.11, document the failure in `docs/status.md` and create an ADR before downgrading to Python 3.10 or splitting environments.
 - Do not let DP3 reinstall an older CPU/CUDA PyTorch build over the working RTX 5090 environment.
 - Use `pg3d.policies.dp3` for runtime DP3 code. `external/dp3` is kept as a temporary reference
   while the narrow policy/training slice is ported.

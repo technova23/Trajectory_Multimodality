@@ -1,5 +1,9 @@
 # Milestones
 
+`docs/project_proposal.html` is the source-of-truth research plan. This file breaks that proposal
+into repo execution milestones, so P03/P04/P05 split the proposal's simulator scaffold and custom
+reach/data-adapter work into smaller Codex-sized tasks.
+
 ## M0 — Repo, docs, dependency mirrors, and workstation setup
 
 Goal: create a Codex-friendly repo with reproducible commands and private dependency mirrors.
@@ -9,7 +13,7 @@ Deliverables:
 - `AGENTS.md`, docs, ADRs, prompts, runbooks.
 - `uv` project with Python 3.11 and PyTorch CUDA 12.9 path.
 - Private DP3 mirror as a submodule.
-- RLBench/CoppeliaSim/PyRep install notes.
+- ManiSkill install notes and non-rendering smoke script.
 - Smoke checks for package import, pytest, lint, and RTX 5090 PyTorch.
 
 Done when:
@@ -17,28 +21,29 @@ Done when:
 - `make test`, `make lint`, and `make gpu-check` pass on the workstation, or failures are documented.
 - Submodules can be cloned on another workstation.
 
-## M1 — RLBench ReachTarget smoke and observation adapter
+## M1 — ManiSkill smoke and observation adapter
 
-Goal: launch RLBench `ReachTarget`, collect observations, and convert them into pg3d observation objects.
+Goal: launch a built-in ManiSkill task, inspect observations, and convert ManiSkill outputs into pg3d observation objects.
 
 Deliverables:
 
-- `pg3d.envs.rlbench_adapter` package.
+- `pg3d.envs.maniskill_adapter` package.
 - `Observation` dataclass/model with point cloud, robot state, masks, and sim GT.
-- Script to launch/reset/step `ReachTarget`.
-- Script to render/save RGB-D, point cloud, segmentation, and robot state summaries.
+- Script to launch/reset/step `PickCube-v1` or `PushCube-v1` without rendering.
+- Adapter path for state first, then RGB-D/point-cloud/segmentation summaries when rendering is configured.
 
 Done when:
 
-- A local smoke script resets ReachTarget and saves one observation bundle.
-- The runbook includes exact environment variables and commands.
+- A local smoke script resets a built-in ManiSkill task and prints observation/action spaces.
+- The runbook includes exact uv commands, asset notes, and Vulkan/rendering caveats.
 
 ## M2 — Reach demonstrations and dataset writer
 
-Goal: generate/replay nominal reach demos and write DP3-compatible data.
+Goal: generate/replay nominal ManiSkill reach demos and write DP3-compatible data.
 
 Deliverables:
 
+- Built-in task smoke path and, if needed, a narrow `PG3DReach` custom task.
 - Demo generation script for Reach-Narrow and Reach-Medium variants.
 - Action chunk extraction for absolute joint targets and delta joint targets.
 - Dataset writer producing schema-compatible Zarr or DP3 training files.
@@ -55,7 +60,7 @@ Goal: train/evaluate a base DP3-style policy on nominal reach.
 
 Deliverables:
 
-- DP3 fork modifications for RLBench reach dataset loading.
+- DP3 integration for the pg3d ManiSkill reach dataset.
 - Training configs for Reach-Narrow and Reach-Medium.
 - Evaluation script with W&B logging.
 - First nominal success metrics and videos.
@@ -114,7 +119,7 @@ Deliverables:
 
 Done when:
 
-- On constrained ReachTarget, reranker runs end-to-end for at least a few episodes.
+- On constrained ManiSkill reach, reranker runs end-to-end for at least a few episodes.
 
 ## M7 — First constrained reach MVP
 

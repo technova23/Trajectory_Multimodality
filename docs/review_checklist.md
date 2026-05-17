@@ -13,7 +13,7 @@ Use this checklist for Codex self-review and human review.
 - Are array shapes documented and asserted where useful?
 - Are action chunk conventions explicit?
 - Are simulator GT fields separated from policy-visible inputs?
-- Are lazy imports used for RLBench/PyRep/DP3?
+- Are lazy imports used for ManiSkill/SAPIEN/DP3?
 
 ## Research hygiene
 
@@ -25,7 +25,7 @@ Use this checklist for Codex self-review and human review.
 ## Testing
 
 - Are high-leverage unit tests included for pure geometry/serialization code?
-- Are simulator-dependent tests skippable if RLBench is unavailable?
+- Are simulator-dependent tests skippable if ManiSkill/SAPIEN or rendering support is unavailable?
 - Were `make test` and `make lint` run, or was the reason documented?
 
 ## Docs

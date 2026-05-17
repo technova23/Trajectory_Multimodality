@@ -5,6 +5,7 @@ Help set up private dependency mirrors and submodules for pg3d, especially DP3.
 
 Context to read first:
 - `AGENTS.md`
+- `docs/project_proposal.html` (DO NOT SKIP. READ IN FULL DETAIL; this is critical to the project.)
 - `docs/runbooks/dependency_mirroring.md`
 - `docs/status.md`
 - `docs/adr/0003-dp3-p0-policy.md`
