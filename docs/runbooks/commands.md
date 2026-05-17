@@ -281,6 +281,41 @@ The rollout script re-observes after each configurable `--replan-stride` chunk, 
 weights by default when present, records one post-success hold window by default, and always logs
 the goal marker in the Rerun timeline.
 
+## World-model versus simulator rollout comparison
+
+Compare a stable DP3 reach checkpoint against the P07 world model. The policy is queried from the
+world-model branch, and ManiSkill executes the same action chunks for ground-truth comparison:
+
+```bash
+uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks
+```
+
+```bash
+uv run python scripts/compare_world_model_rollout.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-narrow-100.zarr \
+  --checkpoint-dir artifacts/reach-datasets/dp3-reach-narrow-100-stable-checkpoints \
+  --source dataset \
+  --episodes 3 \
+  --device cuda \
+  --output-dir artifacts/reach-datasets/world-model-vs-sim \
+  --rerun \
+  --video \
+  --allow-failure
+```
+
+Open the overlay:
+
+```bash
+uv run rerun artifacts/reach-datasets/world-model-vs-sim/episode_000_comparison.rrd
+```
+
+The comparison script selects the latest step-named checkpoint from `--checkpoint-dir`, preferring
+`final_step_*.pt` at the latest step. It uses a second ManiSkill ghost env to render robot-segmented
+point clouds at imagined Panda qpos states, then overlays those clouds with the live simulator
+rollout in Rerun. It writes one `episode_XXX_comparison.rrd` per compared episode. Use
+`--source fresh --episodes 50 --seed-start 10000` for fresh-seed comparison after dataset-seed
+overlays look sane.
+
 ## W&B
 
 ```bash

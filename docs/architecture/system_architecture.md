@@ -177,6 +177,27 @@ The first world model is kinematic/geometric:
 
 No learned dynamics. No contact dynamics. No object attachment until pick-and-place.
 
+P07 implementation conventions:
+
+- `pg3d.world_model` is NumPy-first so observations, masks, Zarr data, `.npz` artifacts, and
+  visualization stay on the same simple array boundary. Torch/GPU batching is deferred until
+  reranking scale or energy guidance requires it.
+- `ActionChunk` supports `abs_joint` and `delta_joint`; `ee_pose` is explicitly deferred.
+- Joint chunks use prefix semantics: a 7D Panda arm chunk updates the first seven entries of a 9D
+  qpos, while trailing joints hold their previous values. Delta chunks are cumulative from the
+  previously imagined joint state.
+- `RobotGeometryProvider` is the only FK/mesh boundary. Providers return world-frame EEF positions
+  and world-frame robot point clouds; ManiSkill/SAPIEN robot loading belongs behind that interface.
+- `GeometricWorldModel` requires `Observation.robot_mask`, removes current robot points with it,
+  and inserts provider-generated future robot points into the static scene cloud with aligned
+  future robot masks.
+- The first live Panda provider is a ManiSkill ghost-env adapter outside `pg3d.world_model`. It
+  resets a second reach env with the same seed, sets Panda qpos for imagined states, and renders
+  robot-segmented point clouds so world-model feedback matches the policy's observation domain.
+- `scripts/compare_world_model_rollout.py` compares a checkpoint-driven world-model closed loop
+  against a live ManiSkill rollout executing the same policy action chunks. The policy is queried
+  from the world-model branch, while the simulator branch is ground-truth comparison.
+
 ## Constraint v0
 
 `AvoidRegion(target="eef")` over simple sphere/box regions.

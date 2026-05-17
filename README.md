@@ -249,6 +249,35 @@ closed-loop action chunks, uses EMA checkpoints by default when present, keeps
 rolling briefly after success for stability diagnostics, and writes
 `summary.json`, `metrics.jsonl`, `episode_*.mp4`, and `episode_*.rrd`.
 
+## World-Model Comparison
+
+Compare checkpoint-predicted action chunks rolled out through the P07 world
+model against the same chunks executed in ManiSkill:
+
+```bash
+uv run python scripts/compare_world_model_rollout.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-narrow-100.zarr \
+  --checkpoint-dir artifacts/reach-datasets/dp3-reach-narrow-100-stable-checkpoints \
+  --source dataset \
+  --episodes 3 \
+  --device cuda \
+  --output-dir artifacts/reach-datasets/world-model-vs-sim \
+  --rerun \
+  --video \
+  --allow-failure
+```
+
+Open the overlay:
+
+```bash
+uv run rerun artifacts/reach-datasets/world-model-vs-sim/episode_000_comparison.rrd
+```
+
+The comparison uses a second ManiSkill ghost env to render robot-segmented point
+clouds at imagined Panda qpos states. Rerun overlays the world-model branch and
+the live simulator branch with distinct robot-point colors, writing one
+`episode_XXX_comparison.rrd` file per compared episode.
+
 ## Docs
 
 - `AGENTS.md`: durable agent instructions.

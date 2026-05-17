@@ -31,6 +31,12 @@ dataset-seed or fresh-seed rollouts. The current detour adds post-success hold-p
 reach dataset writer and upgrades the trainer with validation, cosine warmup, gradient clipping,
 EMA checkpoint state, directory-based periodic checkpoints, best-effort W&B checkpoint rollout
 videos, and richer diagnostics for stable non-trivial training runs.
+P07 now adds a pure NumPy robot-only kinematic point-cloud world model. It interprets absolute and
+delta joint chunks, removes current robot points with `Observation.robot_mask`, inserts future
+robot geometry from a simulator-free provider interface, and writes synthetic rollout artifacts for
+visual inspection. The first comparison path now adds a lazy ManiSkill ghost-env Panda geometry
+provider plus a checkpoint rollout comparison script that feeds imagined point clouds back into
+the policy and writes per-episode Rerun overlays for world-model versus simulator rollouts.
 
 ## Immediate next steps
 
@@ -38,8 +44,9 @@ videos, and richer diagnostics for stable non-trivial training runs.
    `hold_steps=8`, replay a fixed subset, and inspect MP4/Rerun artifacts.
 2. Train the moderate 5090 DP3 recipe on the 500-episode dataset, inspecting W&B validation
    metrics plus dataset-seed/fresh-seed policy rollout videos from periodic checkpoints.
-3. Start the kinematic point-cloud world model/FK compositor work using saved reach trajectories
-   as visual sanity checks.
+3. Run workstation world-model versus simulator comparison rollouts from the 100-episode stable
+   checkpoint directory, inspect the Rerun overlays, and use the errors to decide whether the
+   ghost-env provider is sufficient before adding a pure URDF/FK mesh provider.
 
 ## Active risks
 
@@ -85,6 +92,10 @@ videos, and richer diagnostics for stable non-trivial training runs.
 - Stable DP3 reach checkpoints should prefer EMA weights for eval/rollout when present.
 - DP3 reach training checkpoints are now directory-based: periodic files use `step_XXXXXXXX.pt`
   and final files use `final_step_XXXXXXXX.pt`.
+- World model v0 is NumPy-first and simulator-free; ManiSkill/SAPIEN robot FK and mesh sampling
+  must stay behind `RobotGeometryProvider`.
+- The first real Panda geometry provider uses a second ManiSkill ghost env for rendered
+  robot-segmented point clouds. Pure URDF/FK mesh sampling remains a later optimization.
 
 ## Latest work log
 
@@ -110,4 +121,8 @@ See `docs/worklog/`.
   A focused cleanup pass then consolidated duplicate JSON/array/device/checkpoint helpers without
   changing scientific behavior, refreshed the custom reach setup notes, improved `make clean` for
   nested `__pycache__` directories, and passed ruff, 48 pytest tests, smoke imports, and
-  `git diff --check`.
+  `git diff --check`. P07 world-model v0 adds pure synthetic tests and a simulator-free
+  visualization artifact script. The next integration adds a lazy ManiSkill ghost-env geometry
+  provider plus `scripts/compare_world_model_rollout.py`; workstation execution is still needed
+  for full Rerun overlay validation because the sandbox cannot access a supported SAPIEN render
+  device.
