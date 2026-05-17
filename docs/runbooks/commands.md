@@ -388,6 +388,83 @@ rollout in Rerun. It writes one `episode_XXX_comparison.rrd` per compared episod
 `--source fresh --episodes 50 --seed-start 10000` for fresh-seed comparison after dataset-seed
 overlays look sane.
 
+## Constrained reach evaluation
+
+The first MVP eval scaffold compares base DP3, candidate rejection, and world-model reranking on
+the same fixed seeds and the same saved direct-path avoid-region constraints. Code-only waypoint
+planning is a strong reach baseline and is not implemented in this scaffold, so do not over-claim
+reach-only results.
+
+Tiny fixed-seed smoke:
+
+```bash
+uv run python scripts/eval_constrained_reach.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-workspace-1000.zarr \
+  --checkpoint-dir artifacts/reach-datasets/dp3-reach-workspace-1000-checkpoints \
+  --methods base rejection reranking \
+  --source fresh \
+  --episodes 3 \
+  --seed-start 10000 \
+  --device cuda \
+  --planning-horizon-chunks 1 \
+  --execution-horizon-chunks 1 \
+  --k-schedule 16 32 64 \
+  --video \
+  --rerun \
+  --wandb-mode offline \
+  --output-dir artifacts/constrained-reach-eval-smoke \
+  --allow-failure
+```
+
+Longer multi-chunk planning smoke:
+
+```bash
+uv run python scripts/eval_constrained_reach.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-workspace-1000.zarr \
+  --checkpoint-dir artifacts/reach-datasets/dp3-reach-workspace-1000-checkpoints \
+  --methods base rejection reranking \
+  --source fresh \
+  --episodes 10 \
+  --seed-start 10100 \
+  --device cuda \
+  --planning-horizon-chunks 2 \
+  --execution-horizon-chunks 1 \
+  --k-schedule 16 32 64 \
+  --video \
+  --rerun \
+  --wandb-mode online \
+  --wandb-project pg3d \
+  --wandb-name constrained-reach-p10-smoke \
+  --output-dir artifacts/constrained-reach-eval-multichunk \
+  --allow-failure
+```
+
+Outputs include `constraints/episode_XXX.json`, `metrics.jsonl`, `decisions.jsonl`,
+`summary.json`, optional `videos/{method}/episode_XXX.mp4`, and optional
+`rerun/{method}/episode_XXX.rrd`.
+
+How to read the printed episode metrics:
+
+- `reach=True` means ManiSkill reported task success at least once during the rollout.
+- `constraint=True` means the executed TCP path stayed outside the avoid-region sphere for the
+  whole rollout.
+- `combined=True` means both reach success and constraint satisfaction were achieved.
+- `final` is the final TCP-to-goal distance in meters; lower is better.
+- `clearance` is the minimum signed distance from the executed TCP path to the avoid region after
+  margin. Positive is outside, near zero grazes the boundary, and negative means the TCP entered
+  the forbidden region.
+
+The `--k-schedule 16 32 64` setting is the controller fallback schedule. Controller methods first
+score 16 sampled candidate chunks. If no feasible candidate is found, they try 32 more, then 64
+more. If all candidates violate the constraint, the controller still returns the least-bad
+candidate and records that fallback in `decisions.jsonl`.
+
+Planning and execution horizons are separate chunk counts. With
+`--planning-horizon-chunks 2 --execution-horizon-chunks 1`, the controller imagines two DP3 chunks
+into the future, feeds the imagined point cloud back into the policy between chunks, scores the
+concatenated imagined rollout, executes only the first selected chunk in ManiSkill, then re-observes
+and repeats. Setting both values to 1 gives the one-chunk receding-horizon case.
+
 ## W&B
 
 ```bash

@@ -203,14 +203,62 @@ P07 implementation conventions:
 
 ## Constraint v0
 
-`AvoidRegion(target="eef")` over simple sphere/box regions.
+P08 implements a Python-first, JSON-serializable constraint API:
 
-Cost terms:
+- `SphereRegion` and `BoxRegion` expose signed distances where positive is outside, zero is on the
+  boundary, and negative is inside.
+- `SceneContext` carries optional eval/debug context such as target position, named regions, and
+  metadata.
+- `AvoidRegion(target="eef")` scores the imagined EEF path against a sphere or box keep-out region
+  with optional clearance margin and weight.
+- `SmoothnessCost(target="q"|"eef", order=1|2)` penalizes first- or second-order trajectory
+  differences.
+- Constraint configs round-trip through JSON-safe dictionaries and a small registry.
+- `make_obstructing_avoid_region(start, goal)` creates a small keep-out sphere centered on the
+  direct EEF path between start and goal for constrained reach eval setup.
 
-- clearance margin violation,
-- final target distance for reach,
-- smoothness,
-- deviation from policy sample consensus.
+Full robot-body collision, IK, policy sample-consensus costs, and multi-constraint reranking remain
+M6+ work.
+
+## Composition v0
+
+P09 adds simulator-free candidate rejection and reranking controllers:
+
+- `ControllerInput` carries the current `Observation`, `SceneContext`, and optional policy-specific
+  input. Future DP3 adapters can pass rolling observation windows through `policy_input` without
+  changing controller logic.
+- `Policy.sample_action_chunks(policy_input, k, rng)` returns candidate `ActionChunk` objects.
+  Optional `score_surrogate` values are lower-is-better soft costs.
+- `RejectionController` keeps policy order and selects the first feasible candidate from K samples.
+- `RerankingController` scores all sampled candidates and selects the best feasible candidate.
+- The default K fallback schedule is 16, 32, then 64. If no candidate is feasible, controllers
+  return the least-bad fallback with explicit diagnostics.
+- Candidate diagnostics record constraint costs/satisfaction, final goal distance, trajectory
+  smoothness, sample-consensus deviation, optional policy surrogate, total score, attempted K, and
+  selection reason.
+
+The real DP3/ManiSkill adapter remains separate: it should wrap `SimpleDP3.predict_action` into
+`sample_action_chunks` and feed the controller rolling-window policy inputs.
+
+## Constrained reach eval scaffold
+
+P10 connects the current DP3, ManiSkill, world-model, constraint, and controller pieces into the
+first MVP evaluation runner:
+
+- `scripts/eval_constrained_reach.py` compares `base`, `rejection`, and `reranking` on fixed
+  reach seeds with the same checkpoint and the same saved episode constraint JSON.
+- The first constrained overlay uses one direct-path sphere between the initial TCP and goal. It
+  is intentionally simple and repeatable; nominal-path obstacle placement is later work.
+- Planning and execution horizons are separate. `planning_horizon_chunks=1` is the current
+  receding-chunk case; larger values imagine multiple DP3 chunks through the P07 world model while
+  executing only `execution_horizon_chunks` before re-observing in ManiSkill.
+- Controller methods use a DP3 adapter that batches repeated rolling observation windows through
+  `SimpleDP3.predict_action` to sample K stochastic action chunks.
+- Metrics include reach success, constraint satisfaction from the executed simulator TCP path,
+  combined success, final/min target distance, min clearance, smoothness, candidate feasibility
+  fraction, fallback counts, Wilson intervals for boolean rates, and JSONL controller diagnostics.
+- Code-only waypoint planning remains a strong reach baseline and is not implemented in this
+  scaffold; reach-only results should not be over-claimed without that comparison.
 
 ## Logging
 

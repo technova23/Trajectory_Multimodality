@@ -37,7 +37,15 @@ delta joint chunks, removes current robot points with `Observation.robot_mask`, 
 robot geometry from a simulator-free provider interface, and writes synthetic rollout artifacts for
 visual inspection. The first comparison path now adds a lazy ManiSkill ghost-env Panda geometry
 provider plus a checkpoint rollout comparison script that feeds imagined point clouds back into
-the policy and writes per-episode Rerun overlays for world-model versus simulator rollouts.
+the policy and writes per-episode Rerun overlays for world-model versus simulator rollouts. P08 now
+adds the first handwritten constraint objects: sphere/box regions, `AvoidRegion(target="eef")`,
+trajectory smoothness, an obstructing direct-path region helper, and JSON round-trip helpers. P09
+adds pure rejection and reranking controllers with K fallback, hard-then-score feasibility,
+candidate diagnostics, and a policy-input seam for future DP3 rolling-window adapters. P10 now
+adds the first constrained-reach evaluation scaffold connecting DP3, ManiSkill, the ghost-env world
+model, direct-path avoid-region overlays, and base/rejection/reranking methods with fixed seeds,
+JSONL metrics, per-episode constraint JSON, optional MP4/Rerun artifacts, W&B logging, and Wilson
+interval summaries.
 
 ## Immediate next steps
 
@@ -46,9 +54,9 @@ the policy and writes per-episode Rerun overlays for world-model versus simulato
 2. Train the moderate 5090 DP3 recipe on the workspace-uniform dataset for 50k steps, inspecting
    W&B validation metrics plus dataset-seed/fresh-seed policy rollout videos from periodic
    checkpoints.
-3. Run workstation world-model versus simulator comparison rollouts from the 100-episode stable
-   checkpoint directory, inspect the Rerun overlays, and use the errors to decide whether the
-   ghost-env provider is sufficient before adding a pure URDF/FK mesh provider.
+3. Run tiny constrained-reach evaluations with `scripts/eval_constrained_reach.py`, inspect
+   MP4/Rerun diagnostics and controller JSONL, then tune K/horizon/avoid-region settings before
+   reporting any reach-only claims.
 
 ## Active risks
 
@@ -100,6 +108,16 @@ the policy and writes per-episode Rerun overlays for world-model versus simulato
   robot-segmented point clouds. Pure URDF/FK mesh sampling remains a later optimization.
 - Pre-constraints reach policy training should use `PG3DReach-Workspace-v0`, which samples goals
   uniformly over `x[-0.30, 0.40]`, `y[-0.35, 0.35]`, and `z[0.15, 0.75]`.
+- Constraint v0 is Python-object first with JSON config round-trips; full robot collision and IK are
+  deferred.
+- Composition v0 is policy-generic and simulator-free. The real DP3 adapter should wrap
+  `SimpleDP3.predict_action` into `sample_action_chunks` instead of importing DP3 inside
+  `pg3d.composition`.
+- Constrained reach eval uses direct-path spherical avoid regions as the first repeatable overlay.
+  Planning horizon and execution horizon are separate chunk counts; the default is one planned
+  chunk and one executed chunk before re-observation.
+- Code-only waypoint planning is a strong reach baseline and remains unimplemented in P10; any
+  first constrained-reach results should document that limitation.
 
 ## Latest work log
 
@@ -132,4 +150,10 @@ See `docs/worklog/`.
   provider plus `scripts/compare_world_model_rollout.py`; workstation execution is still needed
   for full Rerun overlay validation because the sandbox cannot access a supported SAPIEN render
   device. `PG3DReach-Workspace-v0` is now available for the pre-constraints diverse reach policy,
-  and a 5-demo workspace smoke plus MP4/Rerun replay passed outside the sandbox.
+  and a 5-demo workspace smoke plus MP4/Rerun replay passed outside the sandbox. P08 constraint v0
+  adds pure tests for sphere/box signed distances, EEF avoid-region costs, smoothness costs,
+  obstructing direct-path region generation, serialization, and lazy imports. P09 composition v0
+  adds pure tests for rejection/reranking selection, fallback K schedules, least-bad fallback,
+  diagnostics, future DP3 policy-input plumbing, and lazy imports. P10 constrained reach eval adds
+  pure tests for overlay generation, Wilson intervals, metric aggregation, clearance, horizon
+  validation, multi-chunk rollout concatenation, and lazy eval imports.

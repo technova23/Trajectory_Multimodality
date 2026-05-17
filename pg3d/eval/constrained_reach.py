@@ -1,0 +1,345 @@
+from __future__ import annotations
+
+import json
+import math
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal
+
+import numpy as np
+
+from pg3d.constraints import (
+    AvoidRegion,
+    SceneContext,
+    constraints_to_json,
+    make_obstructing_avoid_region,
+)
+from pg3d.constraints.core import mean_squared_norm
+from pg3d.utils.serialization import jsonable
+from pg3d.world_model import ActionChunk, ImaginedRollout
+
+EvalMethod = Literal["base", "rejection", "reranking"]
+
+
+@dataclass(frozen=True)
+class AvoidOverlayConfig:
+    """Configuration for the first constrained-reach avoid-region overlay."""
+
+    radius: float = 0.08
+    min_radius: float = 0.025
+    margin: float = 0.0
+    weight: float = 1.0
+    tolerance: float = 1e-6
+    name: str = "direct_path_avoid_region"
+
+
+@dataclass
+class EpisodePath:
+    """Executed simulator path used for constrained-reach metrics."""
+
+    tcp_positions: list[np.ndarray] = field(default_factory=list)
+    q: list[np.ndarray] = field(default_factory=list)
+    target_distances: list[float] = field(default_factory=list)
+
+    def append(self, *, tcp_position: Any, q: Any, target_distance: float) -> None:
+        tcp = np.asarray(tcp_position, dtype=np.float32).reshape(3)
+        qpos = np.asarray(q, dtype=np.float32).reshape(-1)
+        if not np.all(np.isfinite(tcp)):
+            raise ValueError("tcp_position must be finite")
+        if not np.all(np.isfinite(qpos)):
+            raise ValueError("q must be finite")
+        self.tcp_positions.append(tcp)
+        self.q.append(qpos)
+        self.target_distances.append(float(target_distance))
+
+    @property
+    def tcp_array(self) -> np.ndarray:
+        if not self.tcp_positions:
+            return np.zeros((0, 3), dtype=np.float32)
+        return np.stack(self.tcp_positions, axis=0).astype(np.float32, copy=False)
+
+    @property
+    def q_array(self) -> np.ndarray:
+        if not self.q:
+            return np.zeros((0, 0), dtype=np.float32)
+        return np.stack(self.q, axis=0).astype(np.float32, copy=False)
+
+
+def validate_planning_horizons(
+    *,
+    planning_horizon_chunks: int,
+    execution_horizon_chunks: int,
+) -> None:
+    """Validate receding-horizon planning/execution chunk counts."""
+    if planning_horizon_chunks <= 0:
+        raise ValueError("planning_horizon_chunks must be positive")
+    if execution_horizon_chunks <= 0:
+        raise ValueError("execution_horizon_chunks must be positive")
+    if execution_horizon_chunks > planning_horizon_chunks:
+        raise ValueError("execution_horizon_chunks must be <= planning_horizon_chunks")
+
+
+def direct_path_avoid_region(
+    *,
+    start_tcp: Any,
+    target_position: Any,
+    config: AvoidOverlayConfig | None = None,
+) -> AvoidRegion:
+    """Create the default episode-specific sphere obstructing the direct TCP-goal path."""
+    cfg = config or AvoidOverlayConfig()
+    start = _vector3(start_tcp, "start_tcp")
+    goal = _vector3(target_position, "target_position")
+    distance = float(np.linalg.norm(goal - start))
+    if distance <= 1e-6:
+        raise ValueError("start_tcp and target_position must be distinct")
+    effective_radius = min(float(cfg.radius), max(float(cfg.min_radius), 0.45 * distance))
+    region = make_obstructing_avoid_region(
+        start,
+        goal,
+        radius=effective_radius,
+        margin=cfg.margin,
+        weight=cfg.weight,
+        name=cfg.name,
+    )
+    return AvoidRegion(
+        region=region.region,
+        target=region.target,
+        margin=region.margin,
+        weight=region.weight,
+        tolerance=cfg.tolerance,
+        name=region.name,
+    )
+
+
+def save_episode_constraints(path: Path, constraints: list[AvoidRegion]) -> None:
+    """Persist one episode's constraint instances for repeatable evaluation."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(jsonable(constraints_to_json(constraints)), indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def scene_context_for_constraints(
+    *,
+    target_position: Any,
+    constraints: list[AvoidRegion],
+    metadata: dict[str, Any] | None = None,
+) -> SceneContext:
+    """Build the scene context passed to composition controllers."""
+    regions = {
+        constraint.name: constraint.region
+        for constraint in constraints
+        if isinstance(constraint, AvoidRegion)
+    }
+    return SceneContext(
+        target_position=np.asarray(target_position, dtype=np.float32),
+        regions=regions,
+        metadata=metadata or {},
+    )
+
+
+def min_constraint_clearance(
+    tcp_positions: Any,
+    constraints: list[AvoidRegion],
+) -> float | None:
+    """Return minimum signed clearance to all avoid regions, after margins."""
+    path = np.asarray(tcp_positions, dtype=np.float32)
+    if path.size == 0 or not constraints:
+        return None
+    if path.ndim != 2 or path.shape[1] != 3:
+        raise ValueError(f"tcp_positions must have shape [T, 3], got {path.shape}")
+    clearances: list[float] = []
+    for constraint in constraints:
+        signed = constraint.region.signed_distance(path)
+        clearances.append(float(np.min(signed - float(constraint.margin))))
+    return min(clearances) if clearances else None
+
+
+def path_satisfies_constraints(
+    tcp_positions: Any,
+    constraints: list[AvoidRegion],
+) -> bool:
+    """Return whether an executed TCP path stays outside all avoid regions."""
+    clearance = min_constraint_clearance(tcp_positions, constraints)
+    if clearance is None:
+        return True
+    tolerance = max((float(constraint.tolerance) for constraint in constraints), default=1e-6)
+    return clearance >= -tolerance
+
+
+def q_trajectory_smoothness(q: Any, *, order: int = 2) -> float:
+    """Return mean squared finite-difference norm for an executed q trajectory."""
+    q_array = np.asarray(q, dtype=np.float32)
+    if q_array.size == 0:
+        return 0.0
+    if q_array.ndim != 2:
+        raise ValueError(f"q must have shape [T, D], got {q_array.shape}")
+    if order not in {1, 2}:
+        raise ValueError("order must be 1 or 2")
+    if q_array.shape[0] <= order:
+        return 0.0
+    return mean_squared_norm(np.diff(q_array, n=order, axis=0))
+
+
+def episode_metric_row(
+    *,
+    method: EvalMethod,
+    episode: int,
+    seed: int,
+    path: EpisodePath,
+    constraints: list[AvoidRegion],
+    reach_success: bool,
+    first_success_step: int | None,
+    steps: int,
+    replans: int,
+    candidate_feasibility_fraction: float | None,
+    fallback_count: int = 0,
+    video: str | None = None,
+    rerun: str | None = None,
+) -> dict[str, Any]:
+    """Build the stable episode-level constrained-reach metric row."""
+    distances = np.asarray(path.target_distances, dtype=np.float32)
+    finite_distances = distances[np.isfinite(distances)]
+    min_clearance = min_constraint_clearance(path.tcp_array, constraints)
+    constraint_satisfied = path_satisfies_constraints(path.tcp_array, constraints)
+    return {
+        "method": method,
+        "episode": int(episode),
+        "seed": int(seed),
+        "steps": int(steps),
+        "replans": int(replans),
+        "reach_success": bool(reach_success),
+        "constraint_satisfied": bool(constraint_satisfied),
+        "combined_success": bool(reach_success and constraint_satisfied),
+        "first_success_step": first_success_step,
+        "final_target_distance": (
+            float(finite_distances[-1]) if finite_distances.size else None
+        ),
+        "min_target_distance": (
+            float(np.min(finite_distances)) if finite_distances.size else None
+        ),
+        "min_clearance": min_clearance,
+        "smoothness": q_trajectory_smoothness(path.q_array, order=2),
+        "candidate_feasibility_fraction": candidate_feasibility_fraction,
+        "fallback_count": int(fallback_count),
+        "video": video,
+        "rerun": rerun,
+    }
+
+
+def wilson_interval(successes: int, total: int, *, z: float = 1.96) -> tuple[float, float]:
+    """Return a Wilson score interval for a binomial proportion."""
+    if total < 0 or successes < 0 or successes > total:
+        raise ValueError("successes and total must satisfy 0 <= successes <= total")
+    if total == 0:
+        return (0.0, 0.0)
+    n = float(total)
+    p = float(successes) / n
+    z2 = z * z
+    center = (p + z2 / (2.0 * n)) / (1.0 + z2 / n)
+    half_width = z * math.sqrt((p * (1.0 - p) + z2 / (4.0 * n)) / n) / (1.0 + z2 / n)
+    return (max(0.0, center - half_width), min(1.0, center + half_width))
+
+
+def summarize_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate episode rows by method with Wilson intervals for boolean rates."""
+    by_method: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_method.setdefault(str(row["method"]), []).append(row)
+
+    summary: dict[str, Any] = {}
+    for method, method_rows in sorted(by_method.items()):
+        total = len(method_rows)
+        method_summary: dict[str, Any] = {"episodes": total}
+        for key in ["reach_success", "constraint_satisfied", "combined_success"]:
+            successes = sum(1 for row in method_rows if bool(row[key]))
+            low, high = wilson_interval(successes, total)
+            method_summary[f"{key}_rate"] = successes / total if total else 0.0
+            method_summary[f"{key}_wilson_low"] = low
+            method_summary[f"{key}_wilson_high"] = high
+        for key in [
+            "final_target_distance",
+            "min_target_distance",
+            "min_clearance",
+            "smoothness",
+            "candidate_feasibility_fraction",
+        ]:
+            method_summary.update(_mean_std(key, method_rows))
+        summary[method] = method_summary
+    return summary
+
+
+def concatenate_rollouts(
+    rollouts: list[ImaginedRollout],
+    *,
+    metadata: dict[str, Any] | None = None,
+) -> ImaginedRollout:
+    """Concatenate imagined rollouts into one multi-chunk candidate rollout."""
+    if not rollouts:
+        raise ValueError("rollouts must not be empty")
+    actions = np.concatenate([rollout.action_chunk.actions for rollout in rollouts], axis=0)
+    action_mode = rollouts[0].action_chunk.action_mode
+    dt = rollouts[0].action_chunk.dt
+    if any(rollout.action_chunk.action_mode != action_mode for rollout in rollouts):
+        raise ValueError("all rollouts must use the same action mode")
+    if any(abs(float(rollout.action_chunk.dt) - float(dt)) > 1e-9 for rollout in rollouts):
+        raise ValueError("all rollouts must use the same dt")
+
+    chunk_metadata: dict[str, Any] = {
+        "planning_horizon_chunks": len(rollouts),
+    }
+    if metadata:
+        chunk_metadata.update(metadata)
+    action_chunk = ActionChunk(
+        actions=actions,
+        action_mode=action_mode,
+        dt=dt,
+        metadata=chunk_metadata,
+    )
+    return ImaginedRollout(
+        q=np.concatenate([rollout.q for rollout in rollouts], axis=0),
+        eef_path=np.concatenate([rollout.eef_path for rollout in rollouts], axis=0),
+        robot_point_clouds=[
+            cloud for rollout in rollouts for cloud in rollout.robot_point_clouds
+        ],
+        scene_point_clouds=[
+            cloud for rollout in rollouts for cloud in rollout.scene_point_clouds
+        ],
+        robot_masks=[mask for rollout in rollouts for mask in rollout.robot_masks],
+        action_chunk=action_chunk,
+        metadata=chunk_metadata,
+    )
+
+
+def candidate_feasibility_fraction(feasible: int, total: int) -> float | None:
+    """Return a candidate feasibility fraction, or None when no candidates were scored."""
+    if total < 0 or feasible < 0 or feasible > total:
+        raise ValueError("feasible and total must satisfy 0 <= feasible <= total")
+    if total == 0:
+        return None
+    return float(feasible) / float(total)
+
+
+def _mean_std(key: str, rows: list[dict[str, Any]]) -> dict[str, float | None]:
+    values = [
+        float(row[key])
+        for row in rows
+        if row.get(key) is not None and np.isfinite(float(row[key]))
+    ]
+    if not values:
+        return {f"{key}_mean": None, f"{key}_std": None}
+    array = np.asarray(values, dtype=np.float32)
+    return {
+        f"{key}_mean": float(np.mean(array)),
+        f"{key}_std": float(np.std(array)),
+    }
+
+
+def _vector3(value: Any, name: str) -> np.ndarray:
+    array = np.asarray(value, dtype=np.float32).reshape(-1)
+    if array.shape != (3,):
+        raise ValueError(f"{name} must have shape (3,), got {array.shape}")
+    if not np.all(np.isfinite(array)):
+        raise ValueError(f"{name} must be finite")
+    return array
