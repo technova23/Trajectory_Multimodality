@@ -91,6 +91,8 @@ P05 reach dataset conventions:
   `/data/target_position`, `/data/tcp_pose`, `/data/success`, and `/meta/episode_ends`.
 - Point clouds are cropped to a workspace AABB before deterministic downsample/pad so far
   outliers from ManiSkill point-cloud rendering do not dominate the DP3 input.
+- The dataset writer records one post-success hold-pose action chunk by default so terminal action
+  labels teach the policy to remain at the reached goal instead of immediately ending the episode.
 
 P06 DP3 reach training conventions:
 
@@ -99,12 +101,17 @@ P06 DP3 reach training conventions:
 - Simulator/eval arrays such as target position, TCP pose, success, robot masks, and simulator
   actions remain out of policy batches.
 - Normalizers are fit per final feature dimension for `point_cloud`, `agent_pos`, and `action`.
-- `scripts/train_dp3_reach.py` is a smoke-scale behavior-cloning loop; W&B is optional and
-  failures to initialize W&B do not block local smoke training unless explicitly requested.
+- `scripts/train_dp3_reach.py` is a behavior-cloning loop with `pad_after=n_action_steps-1`,
+  validation splits, cosine LR warmup, gradient clipping, EMA checkpoints, and optional W&B
+  diagnostics. It writes step-named checkpoints under a checkpoint directory, always writes a
+  final checkpoint when checkpointing is enabled, and can log best-effort checkpoint-time rollout
+  MP4s to W&B without making simulator/rendering failures fatal. Failures to initialize W&B do not
+  block local smoke training unless explicitly requested.
 - `scripts/rollout_dp3_reach_policy.py` is the first closed-loop policy rollout path. It loads
   env/crop/action metadata from the Zarr dataset, keeps a rolling `n_obs_steps` observation window,
   converts 7D DP3 arm labels back into full Panda simulator actions, and saves local MP4/Rerun/JSON
-  artifacts for dataset-seed or fresh-seed rollouts.
+  artifacts for dataset-seed or fresh-seed rollouts. Rollout loading prefers EMA checkpoint weights
+  when they are available and records post-success drift/action metrics.
 
 ### ActionChunk
 

@@ -112,6 +112,7 @@ Generate a small reach dataset:
 ```bash
 uv run python scripts/write_maniskill_reach_dataset.py \
   --num-demos 5 \
+  --hold-steps 8 \
   --output artifacts/pg3d_reach_narrow.zarr \
   --overwrite
 ```
@@ -143,7 +144,34 @@ uv run rerun artifacts/reach_replay/rerun/episode_000.rrd
 Use the `step` timeline in the Rerun viewer and press play.
 
 The dataset writer uses `PG3DReach-Narrow-v0`, `obs_mode="pointcloud"`, `pd_joint_pos`,
-Panda arm-only 7D DP3 action labels, and a fixed-size cropped point cloud by default.
+Panda arm-only 7D DP3 action labels, one extra action chunk of post-success hold-pose data, and a
+fixed-size cropped point cloud by default.
+
+Pilot before launching the 500-episode dataset:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-Narrow-v0 \
+  --num-demos 100 \
+  --max-attempts 150 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --output artifacts/reach-datasets/pg3d-reach-narrow-100.zarr \
+  --overwrite
+```
+
+Scale to the first nominal 500-episode dataset after pilot replay inspection:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-Narrow-v0 \
+  --num-demos 500 \
+  --max-attempts 700 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --output artifacts/reach-datasets/pg3d-reach-narrow-500.zarr \
+  --overwrite
+```
 
 ## DP3 reach training smoke
 
@@ -155,7 +183,11 @@ uv run python scripts/train_dp3_reach.py \
   --device cpu \
   --max-steps 1 \
   --batch-size 2 \
-  --checkpoint-out artifacts/reach-dataset-smoke/dp3-reach-smoke.pt
+  --num-workers 0 \
+  --val-ratio 0 \
+  --checkpoint-dir artifacts/reach-dataset-smoke/checkpoints \
+  --checkpoint-every 1 \
+  --no-checkpoint-rollout-videos
 ```
 
 Run dataset-only inference/eval against that checkpoint:
@@ -163,7 +195,7 @@ Run dataset-only inference/eval against that checkpoint:
 ```bash
 uv run python scripts/eval_dp3_reach_dataset.py \
   --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
-  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --checkpoint artifacts/reach-dataset-smoke/checkpoints/final_step_00000001.pt \
   --device cpu \
   --max-batches 1 \
   --batch-size 2
@@ -177,11 +209,44 @@ uv run python scripts/train_dp3_reach.py \
   --device cpu \
   --max-steps 1 \
   --wandb-mode offline \
-  --log-histograms
+  --log-histograms \
+  --checkpoint-dir artifacts/reach-dataset-smoke/checkpoints \
+  --no-checkpoint-rollout-videos
 ```
 
 In restricted sandboxes, W&B may fail to create its local cache/socket. The trainer logs a warning
 and continues unless `--wandb-required` is set.
+
+Moderate 5090 pilot training recipe:
+
+```bash
+uv run python scripts/train_dp3_reach.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-narrow-100.zarr \
+  --device cuda \
+  --max-steps 20000 \
+  --batch-size 64 \
+  --num-workers 4 \
+  --val-ratio 0.1 \
+  --val-every 500 \
+  --lr 1e-4 \
+  --warmup-steps 500 \
+  --grad-clip-norm 1.0 \
+  --use-ema \
+  --wandb-mode online \
+  --wandb-project pg3d \
+  --wandb-name dp3-reach-narrow-100-stable \
+  --checkpoint-dir artifacts/reach-datasets/dp3-reach-narrow-100-stable-checkpoints \
+  --checkpoint-every 5000 \
+  --checkpoint-rollout-count 5
+```
+
+The trainer defaults to `pad_after=n_action_steps-1`, cosine LR with warmup, AdamW
+`betas=(0.95, 0.999)`, gradient clipping, EMA checkpoint state, and W&B validation/action-error
+metrics. It writes periodic `step_XXXXXXXX.pt` checkpoints and a final
+`final_step_XXXXXXXX.pt` checkpoint under `--checkpoint-dir`. When W&B is active,
+it also attempts to log checkpoint-time rollout MP4s using three dataset seeds and two fresh seeds
+by default. Use `--no-checkpoint-rollout-videos` to skip simulator/rendering rollouts during
+training.
 
 Run closed-loop policy rollouts in ManiSkill and save MP4/Rerun artifacts:
 
@@ -192,7 +257,7 @@ uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebook
 ```bash
 uv run python scripts/rollout_dp3_reach_policy.py \
   --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
-  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --checkpoint artifacts/reach-dataset-smoke/checkpoints/final_step_00000001.pt \
   --source dataset \
   --episodes 3 \
   --device cuda \
@@ -204,7 +269,7 @@ Evaluate fresh seeds from the same reach distribution:
 ```bash
 uv run python scripts/rollout_dp3_reach_policy.py \
   --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
-  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --checkpoint artifacts/reach-dataset-smoke/checkpoints/final_step_00000001.pt \
   --source fresh \
   --episodes 3 \
   --seed-start 10000 \
@@ -212,8 +277,9 @@ uv run python scripts/rollout_dp3_reach_policy.py \
   --output-dir artifacts/reach-dataset-smoke/policy-rollouts-fresh
 ```
 
-The rollout script re-observes after each configurable `--replan-stride` chunk, stops early on
-success, and always logs the goal marker in the Rerun timeline.
+The rollout script re-observes after each configurable `--replan-stride` chunk, uses EMA checkpoint
+weights by default when present, records one post-success hold window by default, and always logs
+the goal marker in the Rerun timeline.
 
 ## W&B
 

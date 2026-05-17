@@ -6,9 +6,11 @@ import sys
 import numpy as np
 
 from scripts.rollout_dp3_reach_policy import (
+    _distance_drift,
     append_obs_window,
     make_initial_obs_window,
     policy_action_to_sim_action,
+    select_mixed_rollout_specs,
     select_rollout_specs,
 )
 
@@ -108,6 +110,21 @@ def test_select_rollout_specs_dataset_and_fresh_seed_skipping() -> None:
     assert [spec.dataset_episode_index for spec in indexed_specs] == [2, 0]
     assert [spec.seed for spec in indexed_specs] == [7, 5]
     assert [spec.seed for spec in fresh_specs] == [10002, 10003, 10004]
+
+
+def test_select_mixed_rollout_specs_defaults_to_three_dataset_two_fresh() -> None:
+    specs = select_mixed_rollout_specs(
+        dataset_episode_seeds=[1, 2, 3, 10000],
+        total_count=5,
+        seed_start=10000,
+    )
+
+    assert [spec.source for spec in specs] == ["dataset", "dataset", "dataset", "fresh", "fresh"]
+    assert [spec.seed for spec in specs] == [1, 2, 3, 10001, 10002]
+
+
+def test_distance_drift_ignores_non_finite_values() -> None:
+    assert np.isclose(_distance_drift([0.02, float("nan"), 0.05, 0.03]), 0.03)
 
 
 def test_rollout_script_import_keeps_simulator_lazy() -> None:

@@ -66,6 +66,17 @@ def test_sequence_indices_pad_episode_start() -> None:
     assert indices[0].tolist() == [0, 2, 1, 3]
 
 
+def test_sequence_indices_pad_episode_end_for_terminal_chunks() -> None:
+    indices = create_sequence_indices(
+        np.asarray([4], dtype=np.int64),
+        sequence_length=3,
+        episode_mask=np.asarray([True]),
+        pad_after=2,
+    )
+
+    assert indices[-1].tolist() == [3, 4, 0, 1]
+
+
 def test_reach_dataset_normalizer_supports_dp3_loss(tmp_path) -> None:
     dataset_path = _write_reach_dataset(tmp_path, num_episodes=2, episode_length=4)
     dataset = ReachSequenceDataset(

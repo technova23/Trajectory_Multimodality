@@ -34,7 +34,11 @@ def main(argv: list[str] | None = None) -> int:
         num_workers=0,
     )
     policy = (
-        _load_policy_from_checkpoint(args.checkpoint, device=device)
+        _load_policy_from_checkpoint(
+            args.checkpoint,
+            device=device,
+            prefer_ema=args.checkpoint_model == "ema",
+        )
         if args.checkpoint is not None
         else _build_untrained_policy(args, dataset=dataset, device=device)
     )
@@ -80,6 +84,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr"),
     )
     parser.add_argument("--checkpoint", type=Path, default=None)
+    parser.add_argument("--checkpoint-model", choices=["ema", "raw"], default="ema")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--horizon", type=int, default=16)
@@ -125,11 +130,21 @@ def _build_untrained_policy(
     return policy
 
 
-def _load_policy_from_checkpoint(path: Path, *, device: torch.device) -> SimpleDP3:
+def _load_policy_from_checkpoint(
+    path: Path,
+    *,
+    device: torch.device,
+    prefer_ema: bool,
+) -> SimpleDP3:
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     policy = SimpleDP3(**checkpoint["policy_kwargs"])
     policy.set_normalizer(LinearNormalizer.from_state_dict(checkpoint["normalizer"]))
-    policy.load_state_dict(checkpoint["model"], strict=False)
+    model_state = (
+        checkpoint.get("ema_model")
+        if prefer_ema and checkpoint.get("ema_model") is not None
+        else checkpoint["model"]
+    )
+    policy.load_state_dict(model_state, strict=False)
     policy.to(device)
     policy.eval()
     return policy

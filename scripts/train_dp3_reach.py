@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Any
 
 import torch
 
 from pg3d.policies.dp3 import ReachDatasetConfig, ReachSequenceDataset, SimpleDP3
+from pg3d.policies.dp3.modules import EMAModel
 from pg3d.policies.dp3.normalizer import LinearNormalizer
 from pg3d.policies.dp3.reach_dataset import reach_shape_meta
 from pg3d.policies.dp3.utils import dict_apply
@@ -19,65 +22,197 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     torch.manual_seed(args.seed)
     device = _select_device(args.device)
-    dataset = ReachSequenceDataset(
+    train_dataset = ReachSequenceDataset(
         ReachDatasetConfig(
             dataset_path=args.dataset,
             horizon=args.horizon,
             n_obs_steps=args.n_obs_steps,
+            pad_after=args.pad_after,
             val_ratio=args.val_ratio,
             seed=args.seed,
             max_train_episodes=args.max_train_episodes,
         ),
         split="train",
     )
-    if len(dataset) == 0:
+    if len(train_dataset) == 0:
         raise RuntimeError("training dataset has no sequences")
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
+    val_dataset = (
+        train_dataset.get_validation_dataset()
+        if args.val_ratio > 0.0 and train_dataset.num_episodes > 1
+        else None
+    )
+    if val_dataset is not None and len(val_dataset) == 0:
+        val_dataset = None
+
+    pin_memory = args.pin_memory if args.pin_memory is not None else device.type == "cuda"
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
         drop_last=False,
+        pin_memory=pin_memory,
+        persistent_workers=args.num_workers > 0,
     )
-    policy_kwargs = _policy_kwargs(args, shape_meta=dataset.shape_meta)
+    val_loader = (
+        torch.utils.data.DataLoader(
+            val_dataset,
+            batch_size=args.batch_size,
+            shuffle=False,
+            num_workers=args.num_workers,
+            drop_last=False,
+            pin_memory=pin_memory,
+            persistent_workers=args.num_workers > 0,
+        )
+        if val_dataset is not None
+        else None
+    )
+
+    policy_kwargs = _policy_kwargs(args, shape_meta=train_dataset.shape_meta)
     policy = SimpleDP3(**policy_kwargs)
-    policy.set_normalizer(dataset.get_normalizer())
+    policy.set_normalizer(train_dataset.get_normalizer())
     policy.to(device)
-    optimizer = torch.optim.AdamW(policy.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    run = _init_wandb(args, dataset=dataset, policy_kwargs=policy_kwargs)
+    optimizer = torch.optim.AdamW(
+        policy.parameters(),
+        lr=args.lr,
+        betas=(args.adam_beta1, args.adam_beta2),
+        eps=args.adam_eps,
+        weight_decay=args.weight_decay,
+    )
+    scheduler = _build_lr_scheduler(optimizer, args)
+    ema = (
+        EMAModel(copy.deepcopy(policy), max_value=args.ema_max_value)
+        if args.use_ema
+        else None
+    )
+    run = _init_wandb(
+        args,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        policy_kwargs=policy_kwargs,
+    )
 
-    step = 0
-    while step < args.max_steps:
-        for batch in dataloader:
-            step += 1
-            batch = _batch_to(batch, device)
-            policy.train()
-            optimizer.zero_grad(set_to_none=True)
-            loss, loss_dict = policy.compute_loss(batch)
-            loss.backward()
-            grad_norm = _grad_norm(policy)
-            optimizer.step()
-            metrics = {
-                "train/bc_loss": float(loss_dict["bc_loss"]),
-                "train/grad_norm": grad_norm,
-                "train/action_rms": float(batch["action"].detach().pow(2).mean().sqrt().cpu()),
-                "train/point_cloud_mean": float(
-                    batch["obs"]["point_cloud"].detach().mean().cpu()
-                ),
-                "train/step": step,
-            }
-            print(
-                f"step={step} bc_loss={metrics['train/bc_loss']:.6f} "
-                f"grad_norm={metrics['train/grad_norm']:.6f}"
+    data_iter = iter(train_loader)
+    loss_window: deque[float] = deque(maxlen=args.loss_window)
+    best_val_loss: float | None = None
+    latest_val_metrics: dict[str, float] = {}
+    checkpoint_paths: list[Path] = []
+    rollout_attempted_steps: set[int] = set()
+    for step in range(1, args.max_steps + 1):
+        try:
+            batch = next(data_iter)
+        except StopIteration:
+            data_iter = iter(train_loader)
+            batch = next(data_iter)
+
+        batch = _batch_to(batch, device)
+        policy.train()
+        optimizer.zero_grad(set_to_none=True)
+        loss, loss_dict = policy.compute_loss(batch)
+        loss.backward()
+        grad_norm_before = _grad_norm(policy)
+        grad_norm_after = _clip_gradients(policy, args.grad_clip_norm)
+        optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
+        if ema is not None:
+            ema.step(policy)
+
+        bc_loss = float(loss_dict["bc_loss"])
+        loss_window.append(bc_loss)
+        metrics = {
+            "train/bc_loss": bc_loss,
+            "train/bc_loss_rolling": float(sum(loss_window) / len(loss_window)),
+            "train/grad_norm_before_clip": grad_norm_before,
+            "train/grad_norm_after_clip": grad_norm_after,
+            "train/lr": float(optimizer.param_groups[0]["lr"]),
+            "train/action_rms": float(batch["action"].detach().pow(2).mean().sqrt().cpu()),
+            "train/point_cloud_mean": float(batch["obs"]["point_cloud"].detach().mean().cpu()),
+            "train/step": step,
+        }
+
+        if val_loader is not None and (step % args.val_every == 0 or step == args.max_steps):
+            eval_policy = ema.averaged_model if ema is not None else policy
+            latest_val_metrics = _evaluate_policy(
+                eval_policy,
+                val_loader,
+                device=device,
+                max_batches=args.max_val_batches,
             )
-            if run is not None:
-                _wandb_log(run, metrics, batch=batch, step=step, log_histograms=args.log_histograms)
-            if step >= args.max_steps:
-                break
+            metrics.update(latest_val_metrics)
+            val_loss = latest_val_metrics.get("val/bc_loss")
+            if val_loss is not None and (best_val_loss is None or val_loss < best_val_loss):
+                best_val_loss = val_loss
 
-    if args.checkpoint_out is not None:
-        _save_checkpoint(args.checkpoint_out, policy, optimizer, policy_kwargs, args)
-        print(f"saved checkpoint: {args.checkpoint_out}")
+        print(
+            f"step={step} bc_loss={metrics['train/bc_loss']:.6f} "
+            f"rolling={metrics['train/bc_loss_rolling']:.6f} "
+            f"grad={metrics['train/grad_norm_after_clip']:.6f} "
+            f"lr={metrics['train/lr']:.2e}"
+        )
+        if run is not None:
+            _wandb_log(
+                run,
+                metrics,
+                batch=batch,
+                step=step,
+                log_histograms=args.log_histograms and step % args.histogram_every == 0,
+            )
+
+        if args.checkpoint_dir is not None and should_save_checkpoint(step, args.checkpoint_every):
+            checkpoint_path = checkpoint_path_for_step(args.checkpoint_dir, step)
+            _save_checkpoint(
+                checkpoint_path,
+                policy=policy,
+                ema_policy=ema.averaged_model if ema is not None else None,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                policy_kwargs=policy_kwargs,
+                args=args,
+                step=step,
+                best_val_loss=best_val_loss,
+            )
+            checkpoint_paths.append(checkpoint_path)
+            print(f"saved checkpoint: {checkpoint_path}")
+            _maybe_log_checkpoint_rollouts(
+                run,
+                args,
+                train_dataset=train_dataset,
+                policy=ema.averaged_model if ema is not None else policy,
+                device=device,
+                step=step,
+                rollout_attempted_steps=rollout_attempted_steps,
+            )
+
+    final_checkpoint_path: Path | None = None
+    if args.checkpoint_dir is not None:
+        final_checkpoint_path = checkpoint_path_for_step(
+            args.checkpoint_dir,
+            args.max_steps,
+            final=True,
+        )
+        _save_checkpoint(
+            final_checkpoint_path,
+            policy=policy,
+            ema_policy=ema.averaged_model if ema is not None else None,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            policy_kwargs=policy_kwargs,
+            args=args,
+            step=args.max_steps,
+            best_val_loss=best_val_loss,
+        )
+        checkpoint_paths.append(final_checkpoint_path)
+        print(f"saved final checkpoint: {final_checkpoint_path}")
+        _maybe_log_checkpoint_rollouts(
+            run,
+            args,
+            train_dataset=train_dataset,
+            policy=ema.averaged_model if ema is not None else policy,
+            device=device,
+            step=args.max_steps,
+            rollout_attempted_steps=rollout_attempted_steps,
+        )
     if run is not None:
         run.finish()
     print(
@@ -85,9 +220,14 @@ def main(argv: list[str] | None = None) -> int:
         + json.dumps(
             {
                 "dataset": str(args.dataset),
-                "num_sequences": len(dataset),
-                "num_episodes": dataset.num_episodes,
+                "num_train_sequences": len(train_dataset),
+                "num_val_sequences": len(val_dataset) if val_dataset is not None else 0,
+                "num_episodes": train_dataset.num_episodes,
                 "max_steps": args.max_steps,
+                "best_val_loss": best_val_loss,
+                "latest_val_metrics": latest_val_metrics,
+                "checkpoints": [str(path) for path in checkpoint_paths],
+                "final_checkpoint": str(final_checkpoint_path) if final_checkpoint_path else None,
                 "device": str(device),
             },
             sort_keys=True,
@@ -98,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a smoke-scale pg3d-native DP3 training loop on a reach Zarr dataset."
+        description="Run a pg3d-native DP3 training loop on a reach Zarr dataset."
     )
     parser.add_argument(
         "--dataset",
@@ -110,18 +250,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--horizon", type=int, default=16)
     parser.add_argument("--n-obs-steps", type=int, default=2)
     parser.add_argument("--n-action-steps", type=int, default=8)
-    parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--pad-after", type=int, default=None)
+    parser.add_argument("--batch-size", type=int, default=64)
+    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--pin-memory", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--max-steps", type=int, default=1)
-    parser.add_argument("--val-ratio", type=float, default=0.0)
+    parser.add_argument("--val-ratio", type=float, default=0.1)
+    parser.add_argument("--val-every", type=int, default=500)
+    parser.add_argument("--max-val-batches", type=int, default=4)
     parser.add_argument("--max-train-episodes", type=int, default=None)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--adam-beta1", type=float, default=0.95)
+    parser.add_argument("--adam-beta2", type=float, default=0.999)
+    parser.add_argument("--adam-eps", type=float, default=1e-8)
     parser.add_argument("--weight-decay", type=float, default=1e-6)
-    parser.add_argument("--num-inference-steps", type=int, default=4)
-    parser.add_argument("--encoder-output-dim", type=int, default=32)
-    parser.add_argument("--diffusion-step-embed-dim", type=int, default=64)
-    parser.add_argument("--down-dims", type=int, nargs="+", default=[64, 128])
-    parser.add_argument("--kernel-size", type=int, default=3)
+    parser.add_argument("--lr-scheduler", choices=["none", "cosine"], default="cosine")
+    parser.add_argument("--warmup-steps", type=int, default=500)
+    parser.add_argument("--min-lr-scale", type=float, default=0.0)
+    parser.add_argument("--grad-clip-norm", type=float, default=1.0)
+    parser.add_argument("--loss-window", type=int, default=100)
+    parser.add_argument("--use-ema", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--ema-max-value", type=float, default=0.9999)
+    parser.add_argument("--num-inference-steps", type=int, default=10)
+    parser.add_argument("--encoder-output-dim", type=int, default=64)
+    parser.add_argument("--diffusion-step-embed-dim", type=int, default=128)
+    parser.add_argument("--down-dims", type=int, nargs="+", default=[128, 256, 384])
+    parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--n-groups", type=int, default=8)
     parser.add_argument(
         "--wandb-mode",
@@ -132,10 +286,50 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--wandb-name", default=None)
     parser.add_argument("--wandb-required", action="store_true")
     parser.add_argument("--log-histograms", action="store_true")
-    parser.add_argument("--checkpoint-out", type=Path, default=None)
+    parser.add_argument("--histogram-every", type=int, default=100)
+    parser.add_argument("--checkpoint-dir", type=Path, default=None)
+    parser.add_argument("--checkpoint-every", type=int, default=5000)
+    parser.add_argument(
+        "--checkpoint-rollout-videos",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+    )
+    parser.add_argument("--checkpoint-rollout-count", type=int, default=5)
+    parser.add_argument("--checkpoint-rollout-max-steps", type=int, default=50)
+    parser.add_argument("--checkpoint-rollout-post-success-steps", type=int, default=8)
+    parser.add_argument("--checkpoint-rollout-seed-start", type=int, default=10000)
+    parser.add_argument("--checkpoint-rollout-fps", type=int, default=10)
     args = parser.parse_args(argv)
+    if args.pad_after is None:
+        args.pad_after = args.n_action_steps - 1
     if args.max_steps <= 0:
         raise ValueError("--max-steps must be positive")
+    if args.n_action_steps <= 0:
+        raise ValueError("--n-action-steps must be positive")
+    if args.pad_after < 0:
+        raise ValueError("--pad-after must be non-negative")
+    if args.val_every <= 0:
+        raise ValueError("--val-every must be positive")
+    if args.max_val_batches <= 0:
+        raise ValueError("--max-val-batches must be positive")
+    if args.loss_window <= 0:
+        raise ValueError("--loss-window must be positive")
+    if args.histogram_every <= 0:
+        raise ValueError("--histogram-every must be positive")
+    if args.checkpoint_every < 0:
+        raise ValueError("--checkpoint-every must be non-negative")
+    if args.checkpoint_rollout_count <= 0:
+        raise ValueError("--checkpoint-rollout-count must be positive")
+    if args.checkpoint_rollout_max_steps <= 0:
+        raise ValueError("--checkpoint-rollout-max-steps must be positive")
+    if args.checkpoint_rollout_post_success_steps < 0:
+        raise ValueError("--checkpoint-rollout-post-success-steps must be non-negative")
+    if args.checkpoint_rollout_fps <= 0:
+        raise ValueError("--checkpoint-rollout-fps must be positive")
+    if args.warmup_steps < 0:
+        raise ValueError("--warmup-steps must be non-negative")
+    if args.grad_clip_norm < 0:
+        raise ValueError("--grad-clip-norm must be non-negative")
     return args
 
 
@@ -185,10 +379,94 @@ def _grad_norm(policy: torch.nn.Module) -> float:
     return math.sqrt(total)
 
 
+def _clip_gradients(policy: torch.nn.Module, max_norm: float) -> float:
+    if max_norm > 0:
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=max_norm)
+    return _grad_norm(policy)
+
+
+def _build_lr_scheduler(
+    optimizer: torch.optim.Optimizer,
+    args: argparse.Namespace,
+) -> torch.optim.lr_scheduler.LambdaLR | None:
+    if args.lr_scheduler == "none":
+        return None
+    return torch.optim.lr_scheduler.LambdaLR(
+        optimizer,
+        lr_lambda=lambda step: lr_scale_for_step(
+            step,
+            warmup_steps=args.warmup_steps,
+            total_steps=args.max_steps,
+            min_lr_scale=args.min_lr_scale,
+        ),
+    )
+
+
+def lr_scale_for_step(
+    step: int,
+    *,
+    warmup_steps: int,
+    total_steps: int,
+    min_lr_scale: float,
+) -> float:
+    """Linear warmup followed by cosine decay."""
+    if warmup_steps > 0 and step < warmup_steps:
+        return max(float(step + 1) / float(warmup_steps), 1e-8)
+    decay_steps = max(total_steps - warmup_steps, 1)
+    progress = min(max((step - warmup_steps) / decay_steps, 0.0), 1.0)
+    cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+    return min_lr_scale + (1.0 - min_lr_scale) * cosine
+
+
+@torch.no_grad()
+def _evaluate_policy(
+    policy: SimpleDP3,
+    dataloader: torch.utils.data.DataLoader,
+    *,
+    device: torch.device,
+    max_batches: int,
+) -> dict[str, float]:
+    was_training = policy.training
+    policy.eval()
+    total_loss = 0.0
+    total_action_mse = 0.0
+    action_mse_dim: torch.Tensor | None = None
+    batches = 0
+    for batch in dataloader:
+        batch = _batch_to(batch, device)
+        loss, _loss_dict = policy.compute_loss(batch)
+        output = policy.predict_action(batch["obs"])
+        target = batch["action"][
+            :,
+            policy.n_obs_steps - 1 : policy.n_obs_steps - 1 + policy.n_action_steps,
+        ]
+        error = output["action"] - target
+        total_loss += float(loss.detach().cpu())
+        total_action_mse += float(error.pow(2).mean().detach().cpu())
+        per_dim = error.pow(2).mean(dim=(0, 1)).detach().cpu()
+        action_mse_dim = per_dim if action_mse_dim is None else action_mse_dim + per_dim
+        batches += 1
+        if batches >= max_batches:
+            break
+    if was_training:
+        policy.train()
+    if batches == 0:
+        return {}
+    assert action_mse_dim is not None
+    metrics = {
+        "val/bc_loss": total_loss / batches,
+        "val/action_mse": total_action_mse / batches,
+    }
+    for dim_idx, value in enumerate(action_mse_dim / batches):
+        metrics[f"val/action_mse_dim_{dim_idx}"] = float(value)
+    return metrics
+
+
 def _init_wandb(
     args: argparse.Namespace,
     *,
-    dataset: ReachSequenceDataset,
+    train_dataset: ReachSequenceDataset,
+    val_dataset: ReachSequenceDataset | None,
     policy_kwargs: dict[str, Any],
 ) -> Any | None:
     if args.wandb_mode == "disabled":
@@ -202,9 +480,12 @@ def _init_wandb(
             mode=args.wandb_mode,
             config={
                 "dataset": str(args.dataset),
-                "num_sequences": len(dataset),
-                "num_episodes": dataset.num_episodes,
+                "num_train_sequences": len(train_dataset),
+                "num_val_sequences": len(val_dataset) if val_dataset is not None else 0,
+                "num_episodes": train_dataset.num_episodes,
+                "dataset_metadata": train_dataset.metadata,
                 "policy": _jsonable(policy_kwargs),
+                "training": _jsonable(vars(args)),
                 "command": "scripts/train_dp3_reach.py",
             },
         )
@@ -244,29 +525,203 @@ def _wandb_log(
 
 def _save_checkpoint(
     path: Path,
+    *,
     policy: SimpleDP3,
+    ema_policy: SimpleDP3 | None,
     optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler.LambdaLR | None,
     policy_kwargs: dict[str, Any],
     args: argparse.Namespace,
+    step: int,
+    best_val_loss: float | None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    model_state = {
-        key: value.detach().cpu()
-        for key, value in policy.state_dict().items()
-        if not key.startswith("normalizer.")
-    }
     torch.save(
         {
-            "model": model_state,
+            "checkpoint_version": "pg3d.dp3_reach.v2",
+            "model": _model_state(policy),
+            "ema_model": _model_state(ema_policy) if ema_policy is not None else None,
             "normalizer": {
                 key: value.detach().cpu() for key, value in policy.normalizer.state_dict().items()
             },
             "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict() if scheduler is not None else None,
             "policy_kwargs": _jsonable(policy_kwargs),
-            "args": vars(args),
+            "args": _jsonable(vars(args)),
+            "step": step,
+            "best_val_loss": best_val_loss,
         },
         path,
     )
+
+
+def checkpoint_path_for_step(checkpoint_dir: Path, step: int, *, final: bool = False) -> Path:
+    """Return the step-named checkpoint path under a checkpoint directory."""
+    prefix = "final_step" if final else "step"
+    return checkpoint_dir / f"{prefix}_{step:08d}.pt"
+
+
+def should_save_checkpoint(step: int, checkpoint_every: int) -> bool:
+    """Return whether this training step should write a periodic checkpoint."""
+    return checkpoint_every > 0 and step % checkpoint_every == 0
+
+
+def _maybe_log_checkpoint_rollouts(
+    run: Any | None,
+    args: argparse.Namespace,
+    *,
+    train_dataset: ReachSequenceDataset,
+    policy: SimpleDP3,
+    device: torch.device,
+    step: int,
+    rollout_attempted_steps: set[int],
+) -> None:
+    if (
+        run is None
+        or args.checkpoint_dir is None
+        or not args.checkpoint_rollout_videos
+        or step in rollout_attempted_steps
+    ):
+        return
+    rollout_attempted_steps.add(step)
+    try:
+        _log_checkpoint_rollouts(
+            run,
+            args,
+            train_dataset=train_dataset,
+            policy=policy,
+            device=device,
+            step=step,
+        )
+    except Exception as exc:
+        print(
+            "warning: checkpoint rollout video logging failed, continuing training: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        try:
+            run.log({"rollout/skipped": 1.0}, step=step)
+        except Exception:
+            pass
+
+
+def _log_checkpoint_rollouts(
+    run: Any,
+    args: argparse.Namespace,
+    *,
+    train_dataset: ReachSequenceDataset,
+    policy: SimpleDP3,
+    device: torch.device,
+    step: int,
+) -> None:
+    import gymnasium as gym
+    import mani_skill.envs  # noqa: F401
+
+    import wandb
+    from pg3d.envs.maniskill_adapter import register_pg3d_reach_envs
+    from scripts.rollout_dp3_reach_policy import (
+        _action_mode,
+        crop_config_from_metadata,
+        run_policy_rollout,
+        select_mixed_rollout_specs,
+    )
+
+    metadata = train_dataset.metadata
+    dataset_episode_seeds = [
+        int(episode["seed"]) for episode in metadata.get("episodes", []) if "seed" in episode
+    ]
+    specs = select_mixed_rollout_specs(
+        dataset_episode_seeds=dataset_episode_seeds,
+        total_count=args.checkpoint_rollout_count,
+        seed_start=args.checkpoint_rollout_seed_start,
+    )
+    if not specs:
+        return
+
+    register_pg3d_reach_envs()
+    crop_config = crop_config_from_metadata(metadata)
+    action_mode = _action_mode(str(metadata.get("action_mode", "abs_joint")))
+    env_kwargs = dict(metadata.get("env_kwargs", {}))
+    env_kwargs["render_mode"] = "rgb_array"
+    env_kwargs.setdefault("obs_mode", "pointcloud")
+    output_dir = args.checkpoint_dir / "rollout_videos" / f"step_{step:08d}"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    was_training = policy.training
+    policy.eval()
+    env: Any | None = None
+    summaries: list[dict[str, Any]] = []
+    try:
+        env = gym.make(str(metadata["env_id"]), **env_kwargs)
+        for spec in specs:
+            video_path = output_dir / f"{spec.source}_{spec.output_index:03d}.mp4"
+            summaries.append(
+                run_policy_rollout(
+                    env=env,
+                    policy=policy,
+                    spec=spec,
+                    action_mode=action_mode,
+                    crop_config=crop_config,
+                    output_dir=output_dir,
+                    device=device,
+                    max_steps=args.checkpoint_rollout_max_steps,
+                    replan_stride=int(policy.n_action_steps),
+                    post_success_steps=args.checkpoint_rollout_post_success_steps,
+                    gripper_open=0.04,
+                    video_fps=args.checkpoint_rollout_fps,
+                    metrics_file=None,
+                    video_path=video_path,
+                    write_rerun=False,
+                )
+            )
+    finally:
+        if env is not None:
+            env.close()
+        if was_training:
+            policy.train()
+
+    videos = {
+        f"rollout/{summary['source']}_{summary['episode']:03d}": wandb.Video(
+            summary["video"],
+            fps=args.checkpoint_rollout_fps,
+            format="mp4",
+        )
+        for summary in summaries
+    }
+    final_distances = [
+        float(summary["final_distance"])
+        for summary in summaries
+        if summary["final_distance"] is not None
+        and math.isfinite(float(summary["final_distance"]))
+    ]
+    success_rate = (
+        sum(1 if summary["success"] else 0 for summary in summaries) / len(summaries)
+        if summaries
+        else 0.0
+    )
+    run.log(
+        {
+            **videos,
+            "rollout/video_count": len(videos),
+            "rollout/success_rate": success_rate,
+            "rollout/final_distance_mean": (
+                float(sum(final_distances) / len(final_distances))
+                if final_distances
+                else float("nan")
+            ),
+        },
+        step=step,
+    )
+
+
+def _model_state(policy: SimpleDP3 | None) -> dict[str, torch.Tensor]:
+    if policy is None:
+        return {}
+    return {
+        key: value.detach().cpu()
+        for key, value in policy.state_dict().items()
+        if not key.startswith("normalizer.")
+    }
 
 
 def _jsonable(value: Any) -> Any:
@@ -281,12 +736,22 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
-def load_reach_policy_from_checkpoint(path: Path, *, device: torch.device) -> SimpleDP3:
-    """Load a DP3 reach checkpoint written by this smoke trainer."""
+def load_reach_policy_from_checkpoint(
+    path: Path,
+    *,
+    device: torch.device,
+    prefer_ema: bool = True,
+) -> SimpleDP3:
+    """Load a DP3 reach checkpoint written by this trainer."""
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     policy = SimpleDP3(**checkpoint["policy_kwargs"])
     policy.set_normalizer(LinearNormalizer.from_state_dict(checkpoint["normalizer"]))
-    policy.load_state_dict(checkpoint["model"], strict=False)
+    model_state = (
+        checkpoint.get("ema_model")
+        if prefer_ema and checkpoint.get("ema_model") is not None
+        else checkpoint["model"]
+    )
+    policy.load_state_dict(model_state, strict=False)
     policy.to(device)
     policy.eval()
     return policy

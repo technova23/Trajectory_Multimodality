@@ -27,14 +27,16 @@ P06 adds a simulation-free reach Zarr sequence loader for pg3d-native DP3, plus 
 training/eval scripts with optional W&B metrics and histogram logging. P06 now also has a
 closed-loop policy rollout script that loads a trained reach checkpoint, runs it in live
 `PG3DReach-*` ManiSkill environments, and writes MP4 videos, Rerun timelines, and JSON metrics for
-dataset-seed or fresh-seed rollouts.
+dataset-seed or fresh-seed rollouts. The current detour adds post-success hold-pose data to the
+reach dataset writer and upgrades the trainer with validation, cosine warmup, gradient clipping,
+EMA checkpoint state, directory-based periodic checkpoints, best-effort W&B checkpoint rollout
+videos, and richer diagnostics for stable non-trivial training runs.
 
 ## Immediate next steps
 
-1. Generate a larger nominal `PG3DReach-Narrow-v0` dataset and overfit a DP3 checkpoint on the
-   workstation.
-2. Inspect W&B/offline training metrics plus dataset-seed and fresh-seed policy rollout videos
-   before moving to P07.
+1. Generate and inspect a 50-100 episode `PG3DReach-Narrow-v0` pilot dataset with `hold_steps=8`.
+2. Train the moderate 5090 DP3 recipe on the pilot, inspect W&B validation metrics plus
+   dataset-seed/fresh-seed policy rollout videos, then launch the 500-episode dataset.
 3. Use the saved reach trajectories to sanity-check future FK/world-model rollouts.
 
 ## Active risks
@@ -73,8 +75,14 @@ dataset-seed or fresh-seed rollouts.
 - Reach dataset replay can now save MP4 videos and per-episode Rerun timeline artifacts.
 - DP3 reach training consumes only point cloud, agent position, and action arrays; simulator
   ground-truth/debug arrays stay out of policy batches.
-- DP3 policy rollout visualization is local-only for now: MP4, Rerun `.rrd`, `metrics.jsonl`, and
-  `summary.json`, without W&B media upload.
+- Standalone DP3 policy rollout visualization is local-first: MP4, Rerun `.rrd`, `metrics.jsonl`,
+  and `summary.json`. The trainer can also upload a small configurable set of checkpoint-time MP4
+  rollout videos to W&B when W&B and ManiSkill rendering are available.
+- Reach datasets should include one DP3 action chunk of post-success hold-pose data by default so
+  terminal policy chunks learn to stay at the goal.
+- Stable DP3 reach checkpoints should prefer EMA weights for eval/rollout when present.
+- DP3 reach training checkpoints are now directory-based: periodic files use `step_XXXXXXXX.pt`
+  and final files use `final_step_XXXXXXXX.pt`.
 
 ## Latest work log
 
@@ -91,4 +99,9 @@ See `docs/worklog/`.
   `make gpu-check`, `make maniskill-check`, and the state/point-cloud/MP4/Rerun observation
   artifact scripts pass on the RTX 5090 workstation environment. P05 reach dataset smoke/replay
   visualization plus P06 DP3 reach training/eval/rollout smoke validation are recorded in the
-  worklog.
+  worklog. The hold-tail dataset/training stability pass has also been validated with pure tests, a
+  5-demo hold dataset smoke, short CPU training/eval, offline W&B outside the sandbox, and one
+  dataset/fresh live rollout smoke. The intermediate-checkpoint pass adds pure tests for
+  step-named checkpoint paths, periodic/final checkpoint writing, mixed rollout-video seed
+  selection, lazy training imports, and non-fatal checkpoint-rollout failures. It also validates
+  a two-step checkpoint-directory smoke and an outside-sandbox offline W&B checkpoint-video smoke.

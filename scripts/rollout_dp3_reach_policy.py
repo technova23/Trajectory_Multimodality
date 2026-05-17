@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,7 +54,11 @@ def main(argv: list[str] | None = None) -> int:
 
     register_pg3d_reach_envs()
     device = _select_device(args.device)
-    policy = load_reach_policy(args.checkpoint, device=device)
+    policy = load_reach_policy(
+        args.checkpoint,
+        device=device,
+        prefer_ema=args.checkpoint_model == "ema",
+    )
     metadata = load_reach_metadata(args.dataset)
     dataset_episode_seeds = [
         int(episode["seed"]) for episode in metadata.get("episodes", []) if "seed" in episode
@@ -96,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
                         if args.replan_stride is not None
                         else int(policy.n_action_steps)
                     ),
+                    post_success_steps=args.post_success_steps,
                     gripper_open=args.gripper_open,
                     video_fps=args.video_fps,
                     metrics_file=metrics_file,
@@ -135,6 +141,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Roll out a trained pg3d-native DP3 reach policy in ManiSkill."
     )
     parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--checkpoint-model", choices=["ema", "raw"], default="ema")
     parser.add_argument(
         "--dataset",
         type=Path,
@@ -152,6 +159,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed-start", type=int, default=10000)
     parser.add_argument("--max-steps", type=int, default=50)
     parser.add_argument("--replan-stride", type=int, default=None)
+    parser.add_argument("--post-success-steps", type=int, default=8)
     parser.add_argument("--gripper-open", type=float, default=0.04)
     parser.add_argument("--video-fps", type=int, default=10)
     parser.add_argument("--allow-failure", action="store_true")
@@ -162,6 +170,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         raise ValueError("--max-steps must be positive")
     if args.replan_stride is not None and args.replan_stride <= 0:
         raise ValueError("--replan-stride must be positive")
+    if args.post_success_steps < 0:
+        raise ValueError("--post-success-steps must be non-negative")
     return args
 
 
@@ -176,9 +186,12 @@ def run_policy_rollout(
     device: torch.device,
     max_steps: int,
     replan_stride: int,
+    post_success_steps: int,
     gripper_open: float,
     video_fps: int,
-    metrics_file: Any,
+    metrics_file: Any | None,
+    video_path: Path | None = None,
+    write_rerun: bool = True,
 ) -> dict[str, Any]:
     obs, info = env.reset(seed=spec.seed, options={"reconfigure": True})
     frames = [_frame_to_numpy(env.render())]
@@ -188,8 +201,13 @@ def run_policy_rollout(
     timeline.append(first_entry)
     steps = 0
     success = False
+    first_success_step: int | None = None
     final_distance = float("nan")
+    min_distance = float("inf")
+    observed_post_success_steps = 0
     action_norms: list[float] = []
+    post_success_action_norms: list[float] = []
+    post_success_distances: list[float] = []
 
     while steps < max_steps:
         with torch.no_grad():
@@ -216,55 +234,101 @@ def run_policy_rollout(
             timeline.append(entry)
             success = _bool_info(info, "success")
             final_distance = _float_info(info, "tcp_to_goal_dist", default=float("nan"))
+            if np.isfinite(final_distance):
+                min_distance = min(min_distance, final_distance)
             action_norm = float(np.linalg.norm(sim_action))
             action_norms.append(action_norm)
-            metrics_file.write(
-                json.dumps(
-                    _jsonable(
-                        {
-                            "episode": spec.output_index,
-                            "seed": spec.seed,
-                            "step": steps,
-                            "reward": _float_value(reward),
-                            "success": success,
-                            "final_distance": final_distance,
-                            "action_norm": action_norm,
-                        }
-                    ),
-                    sort_keys=True,
-                )
-                + "\n"
+            if success:
+                if first_success_step is None:
+                    first_success_step = steps
+                    if np.isfinite(final_distance):
+                        post_success_distances.append(final_distance)
+                else:
+                    observed_post_success_steps += 1
+                    post_success_action_norms.append(action_norm)
+                    if np.isfinite(final_distance):
+                        post_success_distances.append(final_distance)
+            post_success_done = (
+                first_success_step is not None
+                and observed_post_success_steps >= post_success_steps
             )
-            metrics_file.flush()
-            if success or _bool_any(terminated) or _bool_any(truncated) or steps >= max_steps:
+            if metrics_file is not None:
+                metrics_file.write(
+                    json.dumps(
+                        _jsonable(
+                            {
+                                "episode": spec.output_index,
+                                "seed": spec.seed,
+                                "step": steps,
+                                "reward": _float_value(reward),
+                                "success": success,
+                                "first_success_step": first_success_step,
+                                "final_distance": final_distance,
+                                "min_distance": (
+                                    min_distance if np.isfinite(min_distance) else None
+                                ),
+                                "action_norm": action_norm,
+                                "post_success": bool(first_success_step is not None),
+                            }
+                        ),
+                        sort_keys=True,
+                    )
+                    + "\n"
+                )
+                metrics_file.flush()
+            if (
+                post_success_done
+                or (first_success_step is None and _bool_any(terminated))
+                or _bool_any(truncated)
+                or steps >= max_steps
+            ):
                 break
-        if success or steps >= max_steps:
+        if first_success_step is not None and observed_post_success_steps >= post_success_steps:
+            break
+        if steps >= max_steps:
             break
 
-    video_path = output_dir / f"episode_{spec.output_index:03d}.mp4"
-    rerun_path = output_dir / f"episode_{spec.output_index:03d}.rrd"
+    video_path = video_path or output_dir / f"episode_{spec.output_index:03d}.mp4"
     save_video(video_path, frames, fps=video_fps)
-    save_rerun_timeline(rerun_path, timeline)
+    rerun_path = output_dir / f"episode_{spec.output_index:03d}.rrd" if write_rerun else None
+    if rerun_path is not None:
+        save_rerun_timeline(rerun_path, timeline)
     return {
         "episode": spec.output_index,
         "seed": spec.seed,
         "source": spec.source,
         "dataset_episode_index": spec.dataset_episode_index,
         "steps": steps,
-        "success": success,
+        "success": first_success_step is not None,
+        "first_success_step": first_success_step,
         "final_distance": final_distance,
+        "min_distance": min_distance if np.isfinite(min_distance) else None,
+        "post_success_distance_drift": _distance_drift(post_success_distances),
         "mean_action_norm": float(np.mean(action_norms)) if action_norms else 0.0,
+        "mean_post_success_action_norm": (
+            float(np.mean(post_success_action_norms)) if post_success_action_norms else 0.0
+        ),
         "video": str(video_path),
-        "rerun": str(rerun_path),
+        "rerun": str(rerun_path) if rerun_path is not None else None,
     }
 
 
-def load_reach_policy(path: Path, *, device: torch.device) -> SimpleDP3:
+def load_reach_policy(
+    path: Path,
+    *,
+    device: torch.device,
+    prefer_ema: bool = True,
+) -> SimpleDP3:
     """Load a reach policy checkpoint written by `scripts/train_dp3_reach.py`."""
     checkpoint = torch.load(path, map_location=device, weights_only=False)
     policy = SimpleDP3(**checkpoint["policy_kwargs"])
     policy.set_normalizer(LinearNormalizer.from_state_dict(checkpoint["normalizer"]))
-    policy.load_state_dict(checkpoint["model"], strict=False)
+    model_state = (
+        checkpoint.get("ema_model")
+        if prefer_ema and checkpoint.get("ema_model") is not None
+        else checkpoint["model"]
+    )
+    policy.load_state_dict(model_state, strict=False)
     policy.to(device)
     policy.eval()
     return policy
@@ -431,6 +495,42 @@ def select_rollout_specs(
     raise ValueError(f"unsupported source {source!r}")
 
 
+def select_mixed_rollout_specs(
+    *,
+    dataset_episode_seeds: list[int],
+    total_count: int,
+    seed_start: int = 10000,
+) -> list[RolloutSpec]:
+    """Select the trainer's default mixed dataset/fresh checkpoint rollout set."""
+    if total_count <= 0:
+        raise ValueError("total_count must be positive")
+    dataset_count = min(len(dataset_episode_seeds), math.ceil(total_count * 0.6))
+    fresh_count = total_count - dataset_count
+    specs = []
+    for dataset_idx in range(dataset_count):
+        specs.append(
+            RolloutSpec(
+                output_index=len(specs),
+                seed=dataset_episode_seeds[dataset_idx],
+                source="dataset",
+                dataset_episode_index=dataset_idx,
+            )
+        )
+    training_seeds = set(dataset_episode_seeds)
+    candidate = seed_start
+    while len(specs) < dataset_count + fresh_count:
+        if candidate not in training_seeds:
+            specs.append(
+                RolloutSpec(
+                    output_index=len(specs),
+                    seed=candidate,
+                    source="fresh",
+                )
+            )
+        candidate += 1
+    return specs
+
+
 def save_video(path: Path, frames: list[np.ndarray], *, fps: int) -> None:
     if not frames:
         raise RuntimeError("no frames were captured for video export")
@@ -521,6 +621,13 @@ def _float_value(value: Any) -> float:
 
 def _bool_any(value: Any) -> bool:
     return bool(np.any(_to_numpy(value)))
+
+
+def _distance_drift(distances: list[float]) -> float:
+    finite = np.asarray([value for value in distances if np.isfinite(value)], dtype=np.float32)
+    if finite.size <= 1:
+        return 0.0
+    return float(np.max(finite) - np.min(finite))
 
 
 def _to_numpy(value: Any) -> np.ndarray:
