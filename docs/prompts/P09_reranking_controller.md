@@ -12,6 +12,8 @@ Context to read first:
 - Existing world model and constraints modules.
 
 Constraints:
+- Do not presume missing project or implementation details. When in doubt, ask the user a
+  clarifying question; they are happy to answer as many questions as needed.
 - No energy guidance yet.
 - K should be configurable, starting with 16 and fallback attempts at 32/64.
 - Keep policy interface generic; DP3 adapter can be plugged in later.

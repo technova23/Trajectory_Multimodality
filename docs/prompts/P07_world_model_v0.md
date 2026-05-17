@@ -12,6 +12,8 @@ Context to read first:
 - `docs/adr/0004-action-representation.md`
 
 Constraints:
+- Do not presume missing project or implementation details. When in doubt, ask the user a
+  clarifying question; they are happy to answer as many questions as needed.
 - Start with pure Python/numpy/torch utilities where possible.
 - Keep simulator-specific robot mesh loading behind an interface.
 - Do not implement object attachment yet.

@@ -9,10 +9,11 @@ Current scope is intentionally small:
 - validate the optional simulator dependency through `scripts/check_maniskill.py`;
 - adapt `state_dict` and optional `pointcloud` observations for built-in Franka/Panda
   `PickCube-v1` smoke;
-- defer custom reach, dataset writing, and action adapters until later milestones.
+- register narrow custom reach tasks lazily for smoke-scale dataset writing;
+- write DP3-compatible reach Zarr datasets while keeping training integration in later milestones.
 
 The first task path is:
 
 1. smoke a built-in ManiSkill task such as `PickCube-v1`;
-2. implement a narrow `PG3DReach` custom task only if built-in tasks are not enough for reach data;
+2. generate smoke data from `PG3DReach-Narrow-v0`;
 3. build constrained reach before moving to pick-and-place.

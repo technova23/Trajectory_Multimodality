@@ -24,6 +24,11 @@ The full source-of-truth research plan is `docs/project_proposal.html`.
 - Base policy: pg3d-native DP3 policy core under `pg3d/policies/dp3`.
 - Active simulator smoke: `scripts/check_maniskill.py` using `PickCube-v1` with
   `obs_mode="state"`.
+- Active reach task/data path: custom `PG3DReach-Narrow-v0` /
+  `PG3DReach-Medium-v0` tasks and a Zarr writer for smoke-scale DP3-compatible
+  reach datasets.
+- RLBench, PyRep, CoppeliaSim, and real-robot/xArm implementation work are not
+  active backends in this repo.
 
 ## Setup
 
@@ -43,6 +48,12 @@ For CPU-only work with ManiSkill installed:
 
 ```bash
 uv sync --extra cpu --extra maniskill --group dev
+```
+
+For optional Rerun visualization artifacts:
+
+```bash
+uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks
 ```
 
 If this is a fresh clone, initialize submodules:
@@ -76,6 +87,37 @@ uv run python scripts/check_maniskill.py
 
 The default ManiSkill check is non-rendering. Point-cloud/RGB-D/segmentation
 checks should stay separate because they may require Vulkan and asset setup.
+
+## Reach Dataset Smoke
+
+Generate a small custom-reach dataset:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --num-demos 3 \
+  --output artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --overwrite
+```
+
+Replay stored simulator actions and write videos plus Rerun timelines:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --episodes 3 \
+  --video-dir artifacts/reach-dataset-smoke/videos \
+  --rerun-dir artifacts/reach-dataset-smoke/rerun
+```
+
+Open a replay artifact:
+
+```bash
+uv run rerun artifacts/reach-dataset-smoke/rerun/episode_000.rrd
+```
+
+Use the `step` timeline in the Rerun viewer and press play. The dataset writer
+stores 7D Panda arm labels for DP3 and keeps full simulator actions separately
+for replay.
 
 ## Docs
 

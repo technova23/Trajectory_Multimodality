@@ -81,6 +81,17 @@ P04 ManiSkill adapter conventions:
 - Panda robot masks are derived from link `per_scene_id` values when the live ManiSkill env is
   passed as adapter context; raw observations alone are not enough to map ids to robot/object names.
 
+P05 reach dataset conventions:
+
+- Custom ManiSkill reach tasks register lazily as `PG3DReach-Narrow-v0` and
+  `PG3DReach-Medium-v0`.
+- DP3 policy arrays use `/data/point_cloud` as `float32 [T, 512, 3]`, `/data/state` as
+  Panda qpos `float32 [T, 9]`, and `/data/action` as arm-only `float32 [T, 7]`.
+- Replay/debug arrays keep `/data/sim_action`, `/data/robot_mask`, `/data/point_valid_mask`,
+  `/data/target_position`, `/data/tcp_pose`, `/data/success`, and `/meta/episode_ends`.
+- Point clouds are cropped to a workspace AABB before deterministic downsample/pad so far
+  outliers from ManiSkill point-cloud rendering do not dominate the DP3 input.
+
 ### ActionChunk
 
 ```python

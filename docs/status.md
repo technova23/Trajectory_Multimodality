@@ -21,14 +21,16 @@ and training-step smoke tests. ManiSkill is tracked as a pinned optional uv extr
 imports stay simulator-free. A small non-rendering ManiSkill smoke script validates a built-in
 `PickCube-v1` environment. The first observation adapter now targets Franka/Panda `PickCube-v1`
 state and point-cloud observations, including segmentation-derived robot/object masks when a live
-ManiSkill env context is available.
+ManiSkill env context is available. P05 adds custom `PG3DReach-Narrow-v0` /
+`PG3DReach-Medium-v0` tasks plus a smoke-scale Zarr dataset writer for DP3-compatible reach data.
 
 ## Immediate next steps
 
-1. Run P05: extend the ManiSkill adapter into the reach/custom-task dataset writer.
-2. Use the saved P04 point-cloud artifacts to sanity-check robot/cube masks before world-model work.
-3. Extend the pg3d-native DP3 slice from synthetic smoke tests to a generic zarr dataset and
-   one-step trainer smoke.
+1. Inspect generated `PG3DReach-Narrow-v0` smoke datasets with MP4/Rerun replay artifacts and
+   verify point-cloud crop/mask quality.
+2. Run P06: load the ManiSkill reach Zarr dataset into pg3d-native DP3 and start a smoke training
+   step.
+3. Use the saved reach trajectories to sanity-check future FK/world-model rollouts.
 
 ## Active risks
 
@@ -61,6 +63,9 @@ ManiSkill env context is available.
   separate from simulator ground truth and eval/debug masks.
 - Robot masks are first-class observation metadata for the world model.
 - Franka/Panda is the first robot target for built-in ManiSkill smoke and observation adaptation.
+- Reach dataset DP3 action labels are 7D Panda arm joint targets/deltas; full simulator actions are
+  stored separately for replay.
+- Reach dataset replay can now save MP4 videos and per-episode Rerun timeline artifacts.
 
 ## Latest work log
 
@@ -75,4 +80,5 @@ See `docs/worklog/`.
   `uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks`.
 - Current validation: `uv lock --check`, `make smoke`, `make test`, `make lint`,
   `make gpu-check`, `make maniskill-check`, and the state/point-cloud/MP4/Rerun observation
-  artifact scripts pass on the RTX 5090 workstation environment.
+  artifact scripts pass on the RTX 5090 workstation environment. P05 reach dataset smoke and replay
+  visualization validation is recorded in the worklog.

@@ -12,6 +12,8 @@ Context to read first:
 - Existing ManiSkill adapter, DP3 adapter, world model, constraints, and controllers.
 
 Constraints:
+- Do not presume missing project or implementation details. When in doubt, ask the user a
+  clarifying question; they are happy to answer as many questions as needed.
 - Fixed seeds and small trial counts first.
 - Use W&B, but support `WANDB_MODE=offline`.
 - Save constraint instance JSON for every episode.

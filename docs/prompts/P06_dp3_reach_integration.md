@@ -14,6 +14,8 @@ Context to read first:
 - DP3 README/install/custom task docs in `external/dp3` as reference only.
 
 Constraints:
+- Do not presume missing project or implementation details. When in doubt, ask the user a
+  clarifying question; they are happy to answer as many questions as needed.
 - Do not use `external/dp3` as a runtime import path; it is reference material during migration.
 - Do not edit `external/dp3` unless explicitly asked.
 - Avoid dependency changes that reinstall old torch/gym packages into the main pg3d env.

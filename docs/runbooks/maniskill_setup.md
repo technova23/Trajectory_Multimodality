@@ -102,6 +102,54 @@ uv run python scripts/save_maniskill_observation.py \
   --output-dir artifacts/maniskill_pointcloud_rerun
 ```
 
+## Reach dataset smoke
+
+Generate a 3-demo smoke dataset from the custom reach task:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --num-demos 3 \
+  --output /tmp/pg3d-reach-smoke.zarr \
+  --overwrite
+```
+
+Replay the stored simulator actions:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset /tmp/pg3d-reach-smoke.zarr \
+  --episodes 3
+```
+
+Replay with MP4 videos and Rerun timeline artifacts:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset /tmp/pg3d-reach-smoke.zarr \
+  --episodes 3 \
+  --video-dir artifacts/reach-dataset-smoke/videos \
+  --rerun-dir artifacts/reach-dataset-smoke/rerun
+```
+
+Open one timeline artifact in the Rerun viewer:
+
+```bash
+uv run rerun artifacts/reach-dataset-smoke/rerun/episode_000.rrd
+```
+
+Use the `step` timeline in the Rerun viewer and press play.
+
+The observation-save Rerun command above writes a single static point-cloud snapshot. The replay
+command writes one `.rrd` per episode with a `step` timeline.
+
+The writer registers `PG3DReach-Narrow-v0` lazily, uses the Panda robot with
+`control_mode="pd_joint_pos"`, saves 7D arm-only DP3 action labels, keeps full simulator actions in
+`/data/sim_action`, and crops point clouds to the default workspace AABB:
+
+```text
+x: [-0.9, 0.7], y: [-0.6, 0.6], z: [0.0, 1.1]
+```
+
 ## Optional rendering/point-cloud checks
 
 Do not make rendering part of the default smoke path. Once the adapter needs visual observations,

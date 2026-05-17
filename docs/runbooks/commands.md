@@ -105,6 +105,46 @@ uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebook
 
 The optional `viz` extra uses `rerun-sdk==0.22.1` while pg3d remains on NumPy 1.x.
 
+## ManiSkill reach dataset
+
+Generate a small reach dataset:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --num-demos 5 \
+  --output artifacts/pg3d_reach_narrow.zarr \
+  --overwrite
+```
+
+Replay the stored simulator actions:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset artifacts/pg3d_reach_narrow.zarr \
+  --episodes 5
+```
+
+Replay with MP4 videos and per-episode Rerun timeline artifacts:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset artifacts/pg3d_reach_narrow.zarr \
+  --episodes 5 \
+  --video-dir artifacts/reach_replay/videos \
+  --rerun-dir artifacts/reach_replay/rerun
+```
+
+Open a replay `.rrd` in the Rerun viewer:
+
+```bash
+uv run rerun artifacts/reach_replay/rerun/episode_000.rrd
+```
+
+Use the `step` timeline in the Rerun viewer and press play.
+
+The dataset writer uses `PG3DReach-Narrow-v0`, `obs_mode="pointcloud"`, `pd_joint_pos`,
+Panda arm-only 7D DP3 action labels, and a fixed-size cropped point cloud by default.
+
 ## W&B
 
 ```bash

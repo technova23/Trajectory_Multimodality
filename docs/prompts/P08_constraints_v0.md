@@ -11,6 +11,8 @@ Context to read first:
 - `docs/research_brief.md`
 
 Constraints:
+- Do not presume missing project or implementation details. When in doubt, ask the user a
+  clarifying question; they are happy to answer as many questions as needed.
 - Python object API first; JSON serialization for replay.
 - Simple geometries only: sphere and box initially.
 - No full robot-body collision or IK yet.
