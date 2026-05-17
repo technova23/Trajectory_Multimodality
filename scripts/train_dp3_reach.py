@@ -557,6 +557,7 @@ def _maybe_log_checkpoint_rollouts(
         try:
             run.log({"rollout/skipped": 1.0}, step=step)
         except Exception:
+            # Do not let a secondary W&B reporting failure interrupt training.
             pass
 
 

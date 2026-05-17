@@ -121,7 +121,9 @@ See `docs/worklog/`.
   A focused cleanup pass then consolidated duplicate JSON/array/device/checkpoint helpers without
   changing scientific behavior, refreshed the custom reach setup notes, improved `make clean` for
   nested `__pycache__` directories, and passed ruff, 48 pytest tests, smoke imports, and
-  `git diff --check`. P07 world-model v0 adds pure synthetic tests and a simulator-free
+  `git diff --check`. A post-P07 cleanup audit found no active dead simulator code or stale
+  checkpoint commands; the only current cleanup was doc alignment plus clarifying comments around
+  intentional best-effort fallbacks. P07 world-model v0 adds pure synthetic tests and a simulator-free
   visualization artifact script. The next integration adds a lazy ManiSkill ghost-env geometry
   provider plus `scripts/compare_world_model_rollout.py`; workstation execution is still needed
   for full Rerun overlay validation because the sandbox cannot access a supported SAPIEN render

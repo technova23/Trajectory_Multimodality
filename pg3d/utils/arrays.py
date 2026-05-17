@@ -16,6 +16,7 @@ def to_numpy(value: Any) -> np.ndarray:
         try:
             value = value.numpy()
         except TypeError:
+            # Some tensor-like wrappers expose numpy() but reject it; np.asarray handles them.
             pass
     return np.asarray(value)
 

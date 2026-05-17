@@ -10,10 +10,13 @@ Current scope is intentionally small:
 - adapt `state_dict` and optional `pointcloud` observations for built-in Franka/Panda
   `PickCube-v1` smoke;
 - register narrow custom reach tasks lazily for smoke-scale dataset writing;
-- write DP3-compatible reach Zarr datasets while keeping training integration in later milestones.
+- write DP3-compatible reach Zarr datasets with post-success hold-pose rows;
+- provide a lazy ghost-env Panda geometry provider for world-model versus simulator comparisons.
 
 The first task path is:
 
 1. smoke a built-in ManiSkill task such as `PickCube-v1`;
 2. generate smoke data from `PG3DReach-Narrow-v0`;
-3. build constrained reach before moving to pick-and-place.
+3. train and visualize DP3 reach rollouts from the Zarr dataset;
+4. compare robot-only world-model rollouts against live ManiSkill;
+5. build constrained reach before moving to pick-and-place.
