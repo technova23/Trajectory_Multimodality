@@ -7,7 +7,7 @@ Last updated: 2026-05-17
 Bootstrap a sim-only research codebase for programmatic geometric guidance of 3D diffusion policies. The first MVP is constrained reaching in ManiSkill/SAPIEN:
 
 - base policy: DP3-style point-cloud diffusion policy,
-- simulator: ManiSkill/SAPIEN, with built-in task smoke plus custom narrow/medium reach tasks,
+- simulator: ManiSkill/SAPIEN, with built-in task smoke plus custom narrow/medium/workspace reach tasks,
 - action representation: start with absolute joint target chunks; keep delta joint chunks as fallback,
 - world model: kinematic robot-geometry point-cloud imagination from joint-action chunks,
 - first constraint: `avoid_region` over the end-effector path,
@@ -22,7 +22,8 @@ imports stay simulator-free. A small non-rendering ManiSkill smoke script valida
 `PickCube-v1` environment. The first observation adapter now targets Franka/Panda `PickCube-v1`
 state and point-cloud observations, including segmentation-derived robot/object masks when a live
 ManiSkill env context is available. P05 adds custom `PG3DReach-Narrow-v0` /
-`PG3DReach-Medium-v0` tasks plus a smoke-scale Zarr dataset writer for DP3-compatible reach data.
+`PG3DReach-Medium-v0` / `PG3DReach-Workspace-v0` tasks plus a smoke-scale Zarr dataset writer for
+DP3-compatible reach data.
 P06 adds a simulation-free reach Zarr sequence loader for pg3d-native DP3, plus CPU smoke
 training/eval scripts with optional W&B metrics and histogram logging. P06 now also has a
 closed-loop policy rollout script that loads a trained reach checkpoint, runs it in live
@@ -40,10 +41,11 @@ the policy and writes per-episode Rerun overlays for world-model versus simulato
 
 ## Immediate next steps
 
-1. Scale the exercised `PG3DReach-Narrow-v0` 100-episode path to a 500-episode dataset with
-   `hold_steps=8`, replay a fixed subset, and inspect MP4/Rerun artifacts.
-2. Train the moderate 5090 DP3 recipe on the 500-episode dataset, inspecting W&B validation
-   metrics plus dataset-seed/fresh-seed policy rollout videos from periodic checkpoints.
+1. Generate a `PG3DReach-Workspace-v0` 1000-episode dataset with `hold_steps=8`, replay a fixed
+   50-episode subset, and inspect MP4/Rerun artifacts before using it for constrained reach.
+2. Train the moderate 5090 DP3 recipe on the workspace-uniform dataset for 50k steps, inspecting
+   W&B validation metrics plus dataset-seed/fresh-seed policy rollout videos from periodic
+   checkpoints.
 3. Run workstation world-model versus simulator comparison rollouts from the 100-episode stable
    checkpoint directory, inspect the Rerun overlays, and use the errors to decide whether the
    ghost-env provider is sufficient before adding a pure URDF/FK mesh provider.
@@ -96,6 +98,8 @@ the policy and writes per-episode Rerun overlays for world-model versus simulato
   must stay behind `RobotGeometryProvider`.
 - The first real Panda geometry provider uses a second ManiSkill ghost env for rendered
   robot-segmented point clouds. Pure URDF/FK mesh sampling remains a later optimization.
+- Pre-constraints reach policy training should use `PG3DReach-Workspace-v0`, which samples goals
+  uniformly over `x[-0.30, 0.40]`, `y[-0.35, 0.35]`, and `z[0.15, 0.75]`.
 
 ## Latest work log
 
@@ -127,4 +131,5 @@ See `docs/worklog/`.
   visualization artifact script. The next integration adds a lazy ManiSkill ghost-env geometry
   provider plus `scripts/compare_world_model_rollout.py`; workstation execution is still needed
   for full Rerun overlay validation because the sandbox cannot access a supported SAPIEN render
-  device.
+  device. `PG3DReach-Workspace-v0` is now available for the pre-constraints diverse reach policy,
+  and a 5-demo workspace smoke plus MP4/Rerun replay passed outside the sandbox.

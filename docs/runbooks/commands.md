@@ -160,7 +160,7 @@ uv run python scripts/write_maniskill_reach_dataset.py \
   --overwrite
 ```
 
-Scale to the first nominal 500-episode dataset after pilot replay inspection:
+Scale to the first nominal 500-episode narrow dataset after pilot replay inspection:
 
 ```bash
 uv run python scripts/write_maniskill_reach_dataset.py \
@@ -171,6 +171,50 @@ uv run python scripts/write_maniskill_reach_dataset.py \
   --num-points 512 \
   --output artifacts/reach-datasets/pg3d-reach-narrow-500.zarr \
   --overwrite
+```
+
+Generate a broad workspace-uniform dataset for constraint/reranking policy pretraining:
+
+```bash
+export ART=/home/krishna/code/pg3d/artifacts/reach-datasets
+export DATASET="$ART/pg3d-reach-workspace-1000.zarr"
+export REPLAY="$ART/pg3d-reach-workspace-1000-replay"
+export CKPTS="$ART/dp3-reach-workspace-1000-checkpoints"
+export WANDB_DIR="$ART/wandb"
+export WANDB_CACHE_DIR="$ART/wandb-cache"
+export WANDB_CONFIG_DIR="$ART/wandb-config"
+export UV_CACHE_DIR=/tmp/pg3d-uv-cache
+export MPLCONFIGDIR=/tmp/pg3d-mpl
+```
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-Workspace-v0 \
+  --num-demos 1000 \
+  --max-attempts 1600 \
+  --max-steps-per-demo 100 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --seed-start 0 \
+  --output "$DATASET" \
+  --overwrite
+```
+
+Replay a deterministic inspection subset with MP4 and Rerun artifacts:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset "$DATASET" \
+  --episodes 50 \
+  --video-dir "$REPLAY/videos" \
+  --rerun-dir "$REPLAY/rerun" \
+  --allow-failure
+```
+
+Open one inspection replay:
+
+```bash
+uv run rerun "$REPLAY/rerun/episode_000.rrd"
 ```
 
 ## DP3 reach training smoke
@@ -238,6 +282,34 @@ uv run python scripts/train_dp3_reach.py \
   --checkpoint-dir artifacts/reach-datasets/dp3-reach-narrow-100-stable-checkpoints \
   --checkpoint-every 5000 \
   --checkpoint-rollout-count 5
+```
+
+Workspace-uniform 1000-episode training recipe for constraint/reranking pretraining:
+
+```bash
+uv run python scripts/train_dp3_reach.py \
+  --dataset "$DATASET" \
+  --device cuda \
+  --max-steps 50000 \
+  --batch-size 64 \
+  --num-workers 4 \
+  --val-ratio 0.1 \
+  --val-every 500 \
+  --max-val-batches 8 \
+  --lr 1e-4 \
+  --warmup-steps 1000 \
+  --grad-clip-norm 1.0 \
+  --use-ema \
+  --wandb-mode online \
+  --wandb-project pg3d \
+  --wandb-name dp3-reach-workspace-1000-50k \
+  --log-histograms \
+  --histogram-every 1000 \
+  --checkpoint-dir "$CKPTS" \
+  --checkpoint-every 5000 \
+  --checkpoint-rollout-count 5 \
+  --checkpoint-rollout-max-steps 80 \
+  --checkpoint-rollout-post-success-steps 8
 ```
 
 The trainer defaults to `pad_after=n_action_steps-1`, cosine LR with warmup, AdamW

@@ -17,6 +17,7 @@ from pg3d.envs.maniskill_adapter.dataset import (
     observation_to_dataset_row,
     write_reach_zarr,
 )
+from pg3d.envs.maniskill_adapter.reach_config import reach_task_metadata
 from pg3d.utils.arrays import (
     bool_any as _bool_any,
 )
@@ -126,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         "action_mode": args.action_mode,
         "control_mode": args.control_mode,
         "hold_steps": args.hold_steps,
+        "task": reach_task_metadata(args.env_id),
         "crop": crop_config.to_json(),
         "dataset_stats": dataset_stats,
         "camera": {

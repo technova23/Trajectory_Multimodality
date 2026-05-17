@@ -83,8 +83,11 @@ P04 ManiSkill adapter conventions:
 
 P05 reach dataset conventions:
 
-- Custom ManiSkill reach tasks register lazily as `PG3DReach-Narrow-v0` and
-  `PG3DReach-Medium-v0`.
+- Custom ManiSkill reach tasks register lazily as `PG3DReach-Narrow-v0`,
+  `PG3DReach-Medium-v0`, and `PG3DReach-Workspace-v0`.
+- `PG3DReach-Workspace-v0` samples goals uniformly in a broad Cartesian cuboid with center
+  `(0.05, 0.0, 0.45)` and half extents `(0.35, 0.35, 0.30)` for pre-constraints reach policy
+  diversity.
 - DP3 policy arrays use `/data/point_cloud` as `float32 [T, 512, 3]`, `/data/state` as
   Panda qpos `float32 [T, 9]`, and `/data/action` as arm-only `float32 [T, 7]`.
 - Replay/debug arrays keep `/data/sim_action`, `/data/robot_mask`, `/data/point_valid_mask`,

@@ -7,6 +7,7 @@ import numpy as np
 import scripts.write_maniskill_reach_dataset as writer
 from pg3d.envs.maniskill_adapter import Observation, RobotState, SimGroundTruth
 from pg3d.envs.maniskill_adapter.dataset import PointCloudCropConfig
+from pg3d.envs.maniskill_adapter.reach_config import REACH_TASK_SPECS, reach_task_metadata
 
 
 def test_collect_episode_appends_hold_chunk_after_success(monkeypatch) -> None:
@@ -64,6 +65,20 @@ def test_dataset_stats_reports_hold_coverage() -> None:
     assert stats["success_rate"] == 1.0
     assert stats["hold_coverage"] == 1.0
     assert stats["robot_mask_points"]["mean"] == 1.5
+
+
+def test_workspace_reach_task_defaults_are_simulator_free() -> None:
+    spec = REACH_TASK_SPECS["PG3DReach-Workspace-v0"]
+
+    assert spec.max_episode_steps == 100
+    assert spec.goal_center == (0.05, 0.0, 0.45)
+    assert spec.goal_half_extents == (0.35, 0.35, 0.30)
+    assert spec.goal_bounds == ((-0.3, 0.4), (-0.35, 0.35), (0.15, 0.75))
+
+    metadata = reach_task_metadata("PG3DReach-Workspace-v0")
+    assert metadata["goal_center"] == [0.05, 0.0, 0.45]
+    assert metadata["goal_half_extents"] == [0.35, 0.35, 0.3]
+    assert metadata["goal_bounds"] == [[-0.3, 0.4], [-0.35, 0.35], [0.15, 0.75]]
 
 
 class _FakePose:

@@ -9,8 +9,9 @@ Known constraints:
   the lockfile, this runbook, and the simulator ADR/status notes.
 - The default smoke path uses `obs_mode="state"` and does not require rendering.
 - Point-cloud/RGB-D/segmentation paths may require Vulkan and asset setup.
-- The first built-in smoke task is `PickCube-v1`; custom `PG3DReach-Narrow-v0` and
-  `PG3DReach-Medium-v0` tasks are available for reach dataset smoke/training.
+- The first built-in smoke task is `PickCube-v1`; custom `PG3DReach-Narrow-v0`,
+  `PG3DReach-Medium-v0`, and `PG3DReach-Workspace-v0` tasks are available for reach dataset
+  smoke/training.
 
 ## Install pg3d with ManiSkill
 
@@ -143,13 +144,20 @@ Use the `step` timeline in the Rerun viewer and press play.
 The observation-save Rerun command above writes a single static point-cloud snapshot. The replay
 command writes one `.rrd` per episode with a `step` timeline.
 
-The writer registers `PG3DReach-Narrow-v0` lazily, uses the Panda robot with
+The writer registers pg3d reach tasks lazily, uses the Panda robot with
 `control_mode="pd_joint_pos"`, saves 7D arm-only DP3 action labels, keeps full simulator actions in
 `/data/sim_action`, records one DP3 action chunk of post-success hold-pose rows by default
 (`--hold-steps 8`), and crops point clouds to the default workspace AABB:
 
 ```text
 x: [-0.9, 0.7], y: [-0.6, 0.6], z: [0.0, 1.1]
+```
+
+Use `PG3DReach-Workspace-v0` for the diverse pre-constraints policy. Its goal distribution is
+uniform over:
+
+```text
+x: [-0.30, 0.40], y: [-0.35, 0.35], z: [0.15, 0.75]
 ```
 
 ## Optional rendering/point-cloud checks

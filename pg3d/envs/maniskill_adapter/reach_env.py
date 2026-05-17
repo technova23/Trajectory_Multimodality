@@ -13,9 +13,11 @@ from mani_skill.utils.registration import register_env
 from mani_skill.utils.scene_builder.table import TableSceneBuilder
 from mani_skill.utils.structs.pose import Pose
 
+from pg3d.envs.maniskill_adapter.reach_config import REACH_TASK_SPECS
+
 
 class PG3DReachEnv(BaseEnv):
-    """Narrow Panda reach task for pg3d data-generation smoke tests."""
+    """Panda reach task base for pg3d data-generation variants."""
 
     SUPPORTED_ROBOTS = ["panda"]
     goal_thresh = 0.025
@@ -115,8 +117,9 @@ class PG3DReachNarrowEnv(PG3DReachEnv):
     """Small reset distribution for first DP3 reach dataset smoke."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("goal_center", (0.0, 0.0, 0.35))
-        kwargs.setdefault("goal_half_extents", (0.08, 0.08, 0.08))
+        spec = REACH_TASK_SPECS["PG3DReach-Narrow-v0"]
+        kwargs.setdefault("goal_center", spec.goal_center)
+        kwargs.setdefault("goal_half_extents", spec.goal_half_extents)
         super().__init__(*args, **kwargs)
 
 
@@ -125,6 +128,18 @@ class PG3DReachMediumEnv(PG3DReachEnv):
     """Wider reset distribution for the next nominal reach dataset."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        kwargs.setdefault("goal_center", (0.02, 0.0, 0.38))
-        kwargs.setdefault("goal_half_extents", (0.16, 0.16, 0.14))
+        spec = REACH_TASK_SPECS["PG3DReach-Medium-v0"]
+        kwargs.setdefault("goal_center", spec.goal_center)
+        kwargs.setdefault("goal_half_extents", spec.goal_half_extents)
+        super().__init__(*args, **kwargs)
+
+
+@register_env("PG3DReach-Workspace-v0", max_episode_steps=100)
+class PG3DReachWorkspaceEnv(PG3DReachEnv):
+    """Broad Cartesian goal distribution for constraint/reranking policy pretraining."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        spec = REACH_TASK_SPECS["PG3DReach-Workspace-v0"]
+        kwargs.setdefault("goal_center", spec.goal_center)
+        kwargs.setdefault("goal_half_extents", spec.goal_half_extents)
         super().__init__(*args, **kwargs)
