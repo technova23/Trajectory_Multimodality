@@ -217,6 +217,73 @@ Open one inspection replay:
 uv run rerun "$REPLAY/rerun/episode_000.rrd"
 ```
 
+Create a held-out 50-episode validation dataset from solved workspace seeds before comparing
+constrained methods. The writer skips planner failures and unsuccessful replays unless
+`--keep-failures` is passed, so `--source dataset` evals on this Zarr file use fixed solvable
+episodes instead of arbitrary fresh seeds:
+
+```bash
+export VAL_DATASET="$ART/pg3d-reach-workspace-val-50.zarr"
+export VAL_REPLAY="$ART/pg3d-reach-workspace-val-50-replay"
+export EVAL_OUT="$ART/constrained-reach-val-50"
+```
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-Workspace-v0 \
+  --num-demos 50 \
+  --max-attempts 250 \
+  --max-steps-per-demo 100 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --seed-start 20000 \
+  --output "$VAL_DATASET" \
+  --overwrite
+```
+
+Verify the validation metadata:
+
+```bash
+uv run python - <<'PY'
+import json
+from pathlib import Path
+
+p = Path("/home/krishna/code/pg3d/artifacts/reach-datasets/pg3d-reach-workspace-val-50.zarr/metadata.json")
+m = json.loads(p.read_text())
+print(json.dumps({
+    "env_id": m["env_id"],
+    "num_requested_demos": m["num_requested_demos"],
+    "num_collected_demos": m["num_collected_demos"],
+    "num_attempts": m["num_attempts"],
+    "success_rate": m["dataset_stats"]["success_rate"],
+    "hold_coverage": m["dataset_stats"]["hold_coverage"],
+    "final_distance": m["dataset_stats"]["final_distance"],
+    "seed_start": m["seed_start"],
+    "first_seed": m["episodes"][0]["seed"],
+    "last_seed": m["episodes"][-1]["seed"],
+}, indent=2))
+PY
+```
+
+Strictly replay all validation episodes without visualization:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset "$VAL_DATASET" \
+  --episodes 50
+```
+
+Generate validation replay MP4 and Rerun artifacts:
+
+```bash
+uv run python scripts/replay_maniskill_reach_dataset.py \
+  --dataset "$VAL_DATASET" \
+  --episodes 50 \
+  --video-dir "$VAL_REPLAY/videos" \
+  --rerun-dir "$VAL_REPLAY/rerun" \
+  --allow-failure
+```
+
 ## DP3 reach training smoke
 
 Run a short dataset-loading and training smoke:
@@ -408,9 +475,16 @@ uv run python scripts/eval_constrained_reach.py \
   --device cuda \
   --planning-horizon-chunks 1 \
   --execution-horizon-chunks 1 \
+  --geometry-mode fast \
   --k-schedule 16 32 64 \
   --video \
+  --video-every-episodes 10 \
   --rerun \
+  --rerun-every-episodes 10 \
+  --plots \
+  --plot-every-episodes 10 \
+  --profile \
+  --profile-every-episodes 10 \
   --wandb-mode offline \
   --output-dir artifacts/constrained-reach-eval-smoke \
   --allow-failure
@@ -429,9 +503,16 @@ uv run python scripts/eval_constrained_reach.py \
   --device cuda \
   --planning-horizon-chunks 2 \
   --execution-horizon-chunks 1 \
+  --geometry-mode fast \
   --k-schedule 16 32 64 \
+  --policy-batch-size 64 \
   --video \
+  --video-every-episodes 10 \
   --rerun \
+  --rerun-every-episodes 10 \
+  --plots \
+  --plot-every-episodes 10 \
+  --profile \
   --wandb-mode online \
   --wandb-project pg3d \
   --wandb-name constrained-reach-p10-smoke \
@@ -439,9 +520,102 @@ uv run python scripts/eval_constrained_reach.py \
   --allow-failure
 ```
 
+Validation-set comparison on fixed solved workspace episodes:
+
+```bash
+uv run python scripts/eval_constrained_reach.py \
+  --dataset "$VAL_DATASET" \
+  --checkpoint-dir "$CKPTS" \
+  --methods base rejection reranking \
+  --source dataset \
+  --episodes 50 \
+  --device cuda \
+  --seed 0 \
+  --planning-horizon-chunks 2 \
+  --execution-horizon-chunks 1 \
+  --geometry-mode fast \
+  --k-schedule 16 32 64 \
+  --policy-batch-size 64 \
+  --video \
+  --video-every-episodes 10 \
+  --rerun \
+  --rerun-every-episodes 10 \
+  --plots \
+  --plot-every-episodes 10 \
+  --profile \
+  --profile-every-episodes 10 \
+  --wandb-mode online \
+  --wandb-project pg3d \
+  --wandb-name constrained-reach-val-50 \
+  --output-dir "$EVAL_OUT" \
+  --allow-failure
+```
+
+Write a final method comparison plot with Wilson 95% confidence intervals:
+
+```bash
+uv run python scripts/plot_constrained_reach_summary.py \
+  --summary "$EVAL_OUT/summary.json" \
+  --output "$EVAL_OUT/plots/comparative_success_ci.png"
+```
+
+Print the main numeric comparison:
+
+```bash
+uv run python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+out = Path(os.environ["EVAL_OUT"])
+summary = json.loads((out / "summary.json").read_text())["by_method"]
+for method, stats in summary.items():
+    print(f"\n{method}")
+    for key in [
+        "reach_success_rate",
+        "constraint_satisfied_rate",
+        "combined_success_rate",
+        "final_target_distance_mean",
+        "min_clearance_mean",
+        "candidate_feasibility_fraction_mean",
+    ]:
+        print(f"  {key}: {stats.get(key)}")
+PY
+```
+
 Outputs include `constraints/episode_XXX.json`, `metrics.jsonl`, `decisions.jsonl`,
-`summary.json`, optional `videos/{method}/episode_XXX.mp4`, and optional
-`rerun/{method}/episode_XXX.rrd`.
+`summary.json`, optional `timings.jsonl`, optional `plots/*.png`, optional
+`videos/{method}/episode_XXX.mp4`, and optional `rerun/{method}/episode_XXX.rrd`.
+
+The default `--geometry-mode fast` avoids rendering ghost-env robot point clouds for every
+candidate timestep. It scores candidates from q/EEF trajectories and only renders ghost point
+clouds when a future imagined state must be fed back into DP3 for multi-chunk planning. Use
+`--geometry-mode exact` on a 1-episode spot check when validating that the fast path agrees with
+the original full-render path.
+
+Exact-vs-fast spot check:
+
+```bash
+uv run python scripts/eval_constrained_reach.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-workspace-1000.zarr \
+  --checkpoint-dir artifacts/reach-datasets/dp3-reach-workspace-1000-checkpoints \
+  --methods reranking \
+  --source fresh \
+  --episodes 1 \
+  --seed-start 10100 \
+  --device cuda \
+  --planning-horizon-chunks 2 \
+  --execution-horizon-chunks 1 \
+  --geometry-mode exact \
+  --k-schedule 16 \
+  --profile \
+  --output-dir artifacts/constrained-reach-eval-exact-spot \
+  --allow-failure
+```
+
+Then rerun with `--geometry-mode fast` and compare `summary.json`, `metrics.jsonl`, and
+`timings.jsonl`. Keep `--seed` fixed between runs so DP3 candidate sampling is controlled. For
+larger sweeps, prefer fast mode plus periodic artifacts.
 
 How to read the printed episode metrics:
 
@@ -464,6 +638,30 @@ Planning and execution horizons are separate chunk counts. With
 into the future, feeds the imagined point cloud back into the policy between chunks, scores the
 concatenated imagined rollout, executes only the first selected chunk in ManiSkill, then re-observes
 and repeats. Setting both values to 1 gives the one-chunk receding-horizon case.
+
+### 2026-05-17 validation-set result
+
+The first `pg3d-reach-workspace-val-50.zarr` run used the fixed solved-seed validation workflow
+above, then evaluated `base`, `rejection`, and `reranking` with two planned chunks and one executed
+chunk. The final comparison plot at
+`artifacts/reach-datasets/constrained-reach-val-50/plots/comparative_success_ci.png` was checked
+against both `summary.json` and the raw `metrics.jsonl` rows. It correctly plots the three boolean
+rates with Wilson 95% confidence intervals.
+
+Observed rates:
+
+| method | reach success | constraint satisfied | combined success | mean final distance | mean min clearance |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| base | 0.02 | 0.32 | 0.00 | 0.233 m | -0.0207 m |
+| rejection | 0.02 | 0.36 | 0.00 | 0.233 m | -0.0215 m |
+| reranking | 0.02 | 0.22 | 0.00 | 0.218 m | -0.0339 m |
+
+This is not evidence that reranking helps yet. It means the current workspace checkpoint almost
+never reaches the goal on this validation set: only one of 50 episodes reached for each method,
+and that reached episode violated the avoid region, so combined success is zero. Constraint-only
+success means the executed TCP path stayed outside the avoid sphere, but it can still fail the
+task by ending far from the target. Before tuning constraint controllers, debug base policy reach
+success on the same validation dataset with constraints treated as diagnostics.
 
 ## W&B
 

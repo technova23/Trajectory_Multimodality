@@ -55,6 +55,29 @@ class ManiSkillGhostPandaGeometryProvider(RobotGeometryProvider):
         """Return the ghost-env TCP position for one qpos."""
         return self._snapshot(q).eef_position
 
+    def end_effector_position_only(self, q: Array) -> Array:
+        """Return TCP position after setting qpos without rendering a point cloud."""
+        qpos = as_float_array(q, name="q", ndim=1)
+        self._set_robot_qpos(qpos)
+        unwrapped = getattr(self.env, "unwrapped", self.env)
+        agent = getattr(unwrapped, "agent", None)
+        tcp_pose = getattr(agent, "tcp_pose", None)
+        tcp_position = getattr(tcp_pose, "p", None)
+        if tcp_position is None:
+            raise RuntimeError("ghost ManiSkill env does not expose agent.tcp_pose.p")
+        eef = to_numpy(tcp_position).astype(np.float32, copy=True)
+        if eef.ndim == 2:
+            if self.batch_index >= eef.shape[0]:
+                raise IndexError(
+                    f"batch_index={self.batch_index} is out of range for tcp shape {eef.shape}"
+                )
+            eef = eef[self.batch_index]
+        eef = eef.reshape(-1)
+        if eef.shape != (3,):
+            raise RuntimeError(f"tcp position must have shape (3,), got {eef.shape}")
+        self._cache = None
+        return eef.astype(np.float32, copy=True)
+
     def robot_point_cloud(self, q: Array) -> Array:
         """Return robot-segmented point-cloud points for one qpos."""
         return self._snapshot(q).robot_point_cloud

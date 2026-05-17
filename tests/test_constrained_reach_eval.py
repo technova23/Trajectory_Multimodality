@@ -7,22 +7,34 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import torch
 
+from pg3d.envs.maniskill_adapter.dataset import PointCloudCropConfig
 from pg3d.eval import (
     AvoidOverlayConfig,
     EpisodePath,
+    TimingRecorder,
     candidate_feasibility_fraction,
     concatenate_rollouts,
     direct_path_avoid_region,
     episode_metric_row,
     min_constraint_clearance,
     path_satisfies_constraints,
+    progress_series,
     save_episode_constraints,
+    scene_context_for_constraints,
+    should_emit_episode_artifact,
+    success_rate_ci_rows,
     summarize_metrics,
     validate_planning_horizons,
     wilson_interval,
 )
 from pg3d.world_model import ActionChunk, ImaginedRollout
+from scripts.eval_constrained_reach import (
+    DP3ChunkPolicyAdapter,
+    _build_multichunk_candidates,
+    _seed_torch,
+)
 
 
 def test_direct_path_avoid_region_and_json_persistence(tmp_path: Path) -> None:
@@ -156,11 +168,147 @@ def test_summarize_metrics_uses_stable_schema() -> None:
     assert "final_target_distance_mean" in summary["base"]
 
 
+def test_success_rate_ci_rows_accepts_full_summary() -> None:
+    summary = {
+        "by_method": {
+            "base": {
+                "reach_success_rate": 0.25,
+                "reach_success_wilson_low": 0.1,
+                "reach_success_wilson_high": 0.5,
+                "constraint_satisfied_rate": 0.75,
+                "constraint_satisfied_wilson_low": 0.5,
+                "constraint_satisfied_wilson_high": 0.9,
+                "combined_success_rate": 0.2,
+                "combined_success_wilson_low": 0.05,
+                "combined_success_wilson_high": 0.45,
+            }
+        }
+    }
+
+    rows = success_rate_ci_rows(summary)
+
+    assert [row["metric"] for row in rows] == [
+        "reach_success",
+        "constraint_satisfied",
+        "combined_success",
+    ]
+    assert rows[0]["method"] == "base"
+    assert rows[0]["err_low"] == pytest.approx(0.15)
+    assert rows[0]["err_high"] == pytest.approx(0.25)
+
+
 def test_candidate_feasibility_fraction_validates_counts() -> None:
     assert candidate_feasibility_fraction(1, 4) == pytest.approx(0.25)
     assert candidate_feasibility_fraction(0, 0) is None
     with pytest.raises(ValueError):
         candidate_feasibility_fraction(2, 1)
+
+
+def test_timing_recorder_aggregates_json_safe_events() -> None:
+    recorder = TimingRecorder(enabled=True)
+
+    with recorder.time("policy_sampling", k=16):
+        pass
+    with recorder.time("policy_sampling", k=32):
+        pass
+
+    summary = recorder.summary()
+    events = [event.to_json() for event in recorder.events]
+
+    assert summary["policy_sampling"]["count"] == pytest.approx(2.0)
+    assert summary["policy_sampling"]["total"] >= 0.0
+    assert events[0]["metadata"]["k"] == 16
+
+
+def test_periodic_artifact_selection_includes_first_and_interval() -> None:
+    assert should_emit_episode_artifact(0, 10)
+    assert not should_emit_episode_artifact(8, 10)
+    assert should_emit_episode_artifact(9, 10)
+    with pytest.raises(ValueError):
+        should_emit_episode_artifact(0, 0)
+
+
+def test_progress_series_tracks_cumulative_metrics() -> None:
+    rows = [
+        _metric_row(method="base", episode=0, reach=True, constraint=False),
+        _metric_row(method="base", episode=1, reach=True, constraint=True),
+    ]
+
+    series = progress_series(rows)
+
+    assert series["base"]["reach_success_rate"] == [1.0, 1.0]
+    assert series["base"]["constraint_satisfied_rate"] == [0.0, 0.5]
+    assert series["base"]["combined_success_rate"] == [0.0, 0.5]
+
+
+def test_dp3_adapter_batches_multiple_windows() -> None:
+    policy = _FakeDP3Policy(n_action_steps=2, n_obs_steps=2)
+    adapter = DP3ChunkPolicyAdapter(
+        policy,  # type: ignore[arg-type]
+        action_mode="abs_joint",
+        device=torch.device("cpu"),
+        policy_batch_size=2,
+        timer=TimingRecorder(enabled=True),
+    )
+
+    chunks = adapter.sample_action_chunks_for_windows([_window(), _window(), _window()])
+
+    assert len(chunks) == 3
+    assert policy.batch_sizes == [2, 1]
+    assert chunks[0].actions.shape == (2, 7)
+
+
+def test_seed_torch_controls_policy_sampling_rng() -> None:
+    _seed_torch(123)
+    first = torch.randn(4)
+    _seed_torch(123)
+    second = torch.randn(4)
+
+    torch.testing.assert_close(first, second)
+
+
+def test_fast_multichunk_renders_only_feedback_states() -> None:
+    policy = _FakeDP3Policy(n_action_steps=2, n_obs_steps=2)
+    adapter = DP3ChunkPolicyAdapter(
+        policy,  # type: ignore[arg-type]
+        action_mode="abs_joint",
+        device=torch.device("cpu"),
+        policy_batch_size=8,
+        timer=TimingRecorder(enabled=True),
+    )
+    provider = _FakeFastProvider()
+    constraint = direct_path_avoid_region(
+        start_tcp=[0.0, 0.0, 0.2],
+        target_position=[1.0, 0.0, 0.2],
+    )
+
+    candidates = _build_multichunk_candidates(
+        adapter=adapter,
+        world_model=None,  # type: ignore[arg-type]
+        provider=provider,  # type: ignore[arg-type]
+        current_entry=_entry(),
+        obs_window=_window(),
+        scene=scene_context_for_constraints(
+            target_position=[1.0, 0.0, 0.2],
+            constraints=[constraint],
+        ),
+        constraints=[constraint],
+        crop_config=PointCloudCropConfig(
+            bounds=np.asarray([[-1, 2], [-1, 1], [0, 1]], dtype=np.float32),
+            num_points=4,
+        ),
+        goal_thresh=0.01,
+        planning_horizon_chunks=2,
+        geometry_mode="fast",
+        attempted_k=3,
+        start_index=0,
+        rng=np.random.default_rng(0),
+        timer=TimingRecorder(enabled=True),
+    )
+
+    assert len(candidates) == 3
+    assert provider.eef_calls == 12
+    assert provider.robot_cloud_calls == 6
 
 
 def test_eval_helpers_import_without_heavy_runtime_deps() -> None:
@@ -202,3 +350,77 @@ def _rollout(actions: list[list[float]]) -> ImaginedRollout:
         robot_masks=[np.asarray([True, False], dtype=bool) for _ in range(horizon)],
         action_chunk=chunk,
     )
+
+
+def _entry() -> dict[str, np.ndarray | bool | float]:
+    return {
+        "point_cloud": np.asarray(
+            [
+                [0.0, 0.0, 0.2],
+                [0.1, 0.0, 0.2],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ],
+            dtype=np.float32,
+        ),
+        "robot_mask": np.asarray([False, True, False, False], dtype=bool),
+        "point_valid_mask": np.asarray([True, True, False, False], dtype=bool),
+        "agent_pos": np.asarray([0.0] * 7 + [0.04, 0.04], dtype=np.float32),
+        "target_position": np.asarray([1.0, 0.0, 0.2], dtype=np.float32),
+        "tcp_pose": np.asarray([0.0, 0.0, 0.2, 1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+        "success": False,
+        "final_distance": 1.0,
+    }
+
+
+def _window() -> list[dict[str, np.ndarray | bool | float]]:
+    return [_entry(), _entry()]
+
+
+def _metric_row(
+    *,
+    method: str,
+    episode: int,
+    reach: bool,
+    constraint: bool,
+) -> dict[str, object]:
+    return {
+        "method": method,
+        "episode": episode,
+        "seed": episode,
+        "reach_success": reach,
+        "constraint_satisfied": constraint,
+        "combined_success": reach and constraint,
+        "final_target_distance": 0.1,
+        "min_clearance": 0.01 if constraint else -0.01,
+        "candidate_feasibility_fraction": None,
+        "fallback_count": 0,
+    }
+
+
+class _FakeDP3Policy:
+    def __init__(self, *, n_action_steps: int, n_obs_steps: int) -> None:
+        self.n_action_steps = n_action_steps
+        self.n_obs_steps = n_obs_steps
+        self.batch_sizes: list[int] = []
+
+    def predict_action(self, obs_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        batch_size = int(obs_dict["point_cloud"].shape[0])
+        self.batch_sizes.append(batch_size)
+        base = torch.arange(batch_size, dtype=torch.float32).reshape(batch_size, 1, 1)
+        action = torch.ones((batch_size, self.n_action_steps, 7), dtype=torch.float32)
+        return {"action": action * (base + 0.1)}
+
+
+class _FakeFastProvider:
+    def __init__(self) -> None:
+        self.eef_calls = 0
+        self.robot_cloud_calls = 0
+
+    def end_effector_position_only(self, q: np.ndarray) -> np.ndarray:
+        self.eef_calls += 1
+        return np.asarray([q[0], 0.0, 0.2], dtype=np.float32)
+
+    def robot_point_cloud(self, q: np.ndarray) -> np.ndarray:
+        self.robot_cloud_calls += 1
+        return np.asarray([[q[0], 0.0, 0.2]], dtype=np.float32)

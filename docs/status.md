@@ -45,18 +45,19 @@ candidate diagnostics, and a policy-input seam for future DP3 rolling-window ada
 adds the first constrained-reach evaluation scaffold connecting DP3, ManiSkill, the ghost-env world
 model, direct-path avoid-region overlays, and base/rejection/reranking methods with fixed seeds,
 JSONL metrics, per-episode constraint JSON, optional MP4/Rerun artifacts, W&B logging, and Wilson
-interval summaries.
+interval summaries. The eval runner now defaults to a faster q/EEF scoring mode that avoids
+per-timestep ghost point-cloud renders during candidate scoring, while preserving an exact
+full-render mode for small validation spot checks. It also supports timing JSONL, periodic local
+plots, periodic video/Rerun artifacts, and incremental W&B progress logging.
 
 ## Immediate next steps
 
-1. Generate a `PG3DReach-Workspace-v0` 1000-episode dataset with `hold_steps=8`, replay a fixed
-   50-episode subset, and inspect MP4/Rerun artifacts before using it for constrained reach.
-2. Train the moderate 5090 DP3 recipe on the workspace-uniform dataset for 50k steps, inspecting
-   W&B validation metrics plus dataset-seed/fresh-seed policy rollout videos from periodic
-   checkpoints.
-3. Run tiny constrained-reach evaluations with `scripts/eval_constrained_reach.py`, inspect
-   MP4/Rerun diagnostics and controller JSONL, then tune K/horizon/avoid-region settings before
-   reporting any reach-only claims.
+1. Debug base DP3 reach success on the held-out 50-episode workspace validation set before drawing
+   conclusions about constraint controllers.
+2. Inspect validation-set MP4/Rerun artifacts, rollout horizons, checkpoint quality, and
+   train/eval distribution match to explain the current 2% reach success.
+3. After base reach is reliable, rerun base/rejection/reranking with the fixed validation workflow
+   and tune K/horizon/avoid-region settings before reporting any reach-only claims.
 
 ## Active risks
 
@@ -116,6 +117,13 @@ interval summaries.
 - Constrained reach eval uses direct-path spherical avoid regions as the first repeatable overlay.
   Planning horizon and execution horizon are separate chunk counts; the default is one planned
   chunk and one executed chunk before re-observation.
+- Eval geometry mode defaults to `fast`; use `--geometry-mode exact` for one-episode reference
+  comparisons when validating speedups.
+- Constrained reach validation should use a held-out solved validation Zarr with `--source dataset`
+  rather than arbitrary `--source fresh` seeds when comparing methods.
+- The first 50-episode workspace validation comparison showed 2% reach success for all three
+  methods and 0% combined success, so the current bottleneck is base reach reliability rather than
+  constraint selection.
 - Code-only waypoint planning is a strong reach baseline and remains unimplemented in P10; any
   first constrained-reach results should document that limitation.
 
@@ -156,4 +164,5 @@ See `docs/worklog/`.
   adds pure tests for rejection/reranking selection, fallback K schedules, least-bad fallback,
   diagnostics, future DP3 policy-input plumbing, and lazy imports. P10 constrained reach eval adds
   pure tests for overlay generation, Wilson intervals, metric aggregation, clearance, horizon
-  validation, multi-chunk rollout concatenation, and lazy eval imports.
+  validation, multi-chunk rollout concatenation, timing aggregation, periodic artifact selection,
+  batched DP3 sampling, fast-mode render counts, and lazy eval imports.

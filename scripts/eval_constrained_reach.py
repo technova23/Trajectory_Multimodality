@@ -38,12 +38,15 @@ from pg3d.envs.maniskill_adapter.dataset import (
 from pg3d.eval import (
     AvoidOverlayConfig,
     EpisodePath,
+    TimingRecorder,
     candidate_feasibility_fraction,
     concatenate_rollouts,
     direct_path_avoid_region,
     episode_metric_row,
+    progress_series,
     save_episode_constraints,
     scene_context_for_constraints,
+    should_emit_episode_artifact,
     summarize_metrics,
     validate_planning_horizons,
 )
@@ -58,6 +61,8 @@ from pg3d.utils.arrays import frame_to_numpy as _frame_to_numpy
 from pg3d.utils.devices import select_device
 from pg3d.utils.serialization import jsonable as _jsonable
 from pg3d.world_model import ActionChunk, GeometricWorldModel, ImaginedRollout
+from pg3d.world_model.chunks import interpret_joint_chunk
+from pg3d.world_model.compositor import compose_robot_cloud, static_scene_from_robot_mask
 from scripts.compare_world_model_rollout import (
     entry_to_world_model_observation,
     world_model_entry_from_rollout_step,
@@ -77,6 +82,7 @@ from scripts.rollout_dp3_reach_policy import (
 )
 
 EvalMethod = Literal["base", "rejection", "reranking"]
+GeometryMode = Literal["fast", "exact"]
 Entry = dict[str, np.ndarray | bool | float]
 
 
@@ -100,11 +106,15 @@ class DP3ChunkPolicyAdapter:
         *,
         action_mode: ActionMode,
         device: torch.device,
+        policy_batch_size: int = 64,
+        timer: TimingRecorder | None = None,
         dt: float = 1.0,
     ) -> None:
         self.policy = policy
         self.action_mode = action_mode
         self.device = device
+        self.policy_batch_size = int(policy_batch_size)
+        self.timer = timer or TimingRecorder(enabled=False)
         self.dt = float(dt)
 
     def sample_action_chunks(
@@ -117,10 +127,9 @@ class DP3ChunkPolicyAdapter:
         """Sample `k` DP3 action chunks from one rolling observation window."""
         if k <= 0:
             raise ValueError("k must be positive")
-        with torch.no_grad():
+        with self.timer.time("policy_sampling", windows=1, samples=k):
             batch = _repeat_obs_window_to_torch(policy_input, k=k, device=self.device)
-            output = self.policy.predict_action(batch)
-            actions = output["action"].detach().cpu().numpy()
+            actions = self._predict_actions(batch)
         return [
             ActionChunk(
                 actions=actions[idx].astype(np.float32, copy=True),
@@ -130,6 +139,38 @@ class DP3ChunkPolicyAdapter:
             )
             for idx in range(actions.shape[0])
         ]
+
+    def sample_action_chunks_for_windows(
+        self,
+        policy_inputs: list[list[Entry]],
+        *,
+        rng: np.random.Generator | None = None,
+    ) -> list[ActionChunk]:
+        """Sample one DP3 action chunk for each rolling observation window."""
+        if not policy_inputs:
+            return []
+        del rng
+        actions: list[np.ndarray] = []
+        with self.timer.time("policy_sampling", windows=len(policy_inputs), samples=1):
+            for start in range(0, len(policy_inputs), self.policy_batch_size):
+                batch_windows = policy_inputs[start : start + self.policy_batch_size]
+                batch = _obs_windows_to_torch(batch_windows, device=self.device)
+                actions.append(self._predict_actions(batch))
+        stacked = np.concatenate(actions, axis=0)
+        return [
+            ActionChunk(
+                actions=stacked[idx].astype(np.float32, copy=True),
+                action_mode=self.action_mode,
+                dt=self.dt,
+                metadata={"candidate_index": idx},
+            )
+            for idx in range(stacked.shape[0])
+        ]
+
+    def _predict_actions(self, batch: dict[str, torch.Tensor]) -> np.ndarray:
+        with torch.inference_mode():
+            output = self.policy.predict_action(batch)
+            return output["action"].detach().cpu().numpy()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -153,6 +194,11 @@ def main(argv: list[str] | None = None) -> int:
     register_pg3d_reach_envs()
     metadata = load_reach_metadata(args.dataset)
     device = select_device(args.device)
+    _seed_torch(args.seed)
+    timer = TimingRecorder(
+        enabled=args.profile,
+        sync_fn=_cuda_sync_fn(device) if args.sync_cuda_timers else None,
+    )
     policy = load_reach_policy_from_checkpoint(
         checkpoint_path,
         device=device,
@@ -185,6 +231,8 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict[str, Any]] = []
     metrics_path = args.output_dir / "metrics.jsonl"
     decisions_path = args.output_dir / "decisions.jsonl"
+    timings_path = args.output_dir / "timings.jsonl"
+    timing_written = 0
     rng = np.random.default_rng(args.seed)
     try:
         sim_env = gym.make(
@@ -196,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
             policy,
             action_mode=action_mode,
             device=device,
+            policy_batch_size=args.policy_batch_size,
+            timer=timer,
         )
         with (
             metrics_path.open("w", encoding="utf-8") as metrics_file,
@@ -213,7 +263,16 @@ def main(argv: list[str] | None = None) -> int:
                     / "constraints"
                     / f"episode_{spec.output_index:03d}.json"
                 )
-                save_episode_constraints(constraint_path, constraints)
+                with timer.time("json_write", artifact="constraint"):
+                    save_episode_constraints(constraint_path, constraints)
+                write_video = args.video and should_emit_episode_artifact(
+                    spec.output_index,
+                    args.video_every_episodes,
+                )
+                write_rerun = args.rerun and should_emit_episode_artifact(
+                    spec.output_index,
+                    args.rerun_every_episodes,
+                )
                 for method in args.methods:
                     row = run_eval_episode(
                         sim_env=sim_env,
@@ -231,18 +290,22 @@ def main(argv: list[str] | None = None) -> int:
                         post_success_steps=args.post_success_steps,
                         planning_horizon_chunks=args.planning_horizon_chunks,
                         execution_horizon_chunks=args.execution_horizon_chunks,
+                        geometry_mode=args.geometry_mode,
                         k_schedule=tuple(args.k_schedule),
                         gripper_open=args.gripper_open,
                         match_current_robot_points=args.match_current_robot_points,
-                        video=args.video,
-                        rerun=args.rerun,
+                        video=write_video,
+                        rerun=write_rerun,
                         video_fps=args.video_fps,
                         decisions_file=decisions_file,
                         rng=rng,
+                        timer=timer,
                     )
                     rows.append(row)
-                    metrics_file.write(json.dumps(_jsonable(row), sort_keys=True) + "\n")
-                    metrics_file.flush()
+                    with timer.time("json_write", artifact="metrics"):
+                        metrics_file.write(json.dumps(_jsonable(row), sort_keys=True) + "\n")
+                        metrics_file.flush()
+                    _log_wandb_episode(run, args=args, row=row, global_step=len(rows))
                     print(
                         f"method={method} episode={spec.output_index} seed={spec.seed} "
                         f"combined={row['combined_success']} reach={row['reach_success']} "
@@ -250,6 +313,26 @@ def main(argv: list[str] | None = None) -> int:
                         f"final={_format_optional(row['final_target_distance'])} "
                         f"clearance={_format_optional(row['min_clearance'])}"
                     )
+                timing_written = _write_new_timing_events(
+                    timer,
+                    timings_path,
+                    start_index=timing_written,
+                )
+                if should_emit_episode_artifact(spec.output_index, args.plot_every_episodes):
+                    _maybe_emit_progress(
+                        output_dir=args.output_dir,
+                        rows=rows,
+                        timer=timer,
+                        episode_index=spec.output_index,
+                        plots=args.plots or run is not None,
+                        run=run,
+                        args=args,
+                    )
+                if args.profile and should_emit_episode_artifact(
+                    spec.output_index,
+                    args.profile_every_episodes,
+                ):
+                    _print_timing_summary(timer)
     except Exception as exc:
         print(f"Failed constrained reach eval: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
@@ -268,7 +351,9 @@ def main(argv: list[str] | None = None) -> int:
         "env_kwargs": _env_kwargs(metadata, render_mode="rgb_array" if args.video else None),
         "planning_horizon_chunks": args.planning_horizon_chunks,
         "execution_horizon_chunks": args.execution_horizon_chunks,
+        "geometry_mode": args.geometry_mode,
         "k_schedule": list(args.k_schedule),
+        "timing": timer.summary(),
         "episodes": rows,
         "by_method": summarize_metrics(rows),
         "code_only_baseline_note": (
@@ -281,7 +366,16 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
     if args.plots:
-        _maybe_write_plots(args.output_dir, summary["by_method"])
+        _maybe_emit_progress(
+            output_dir=args.output_dir,
+            rows=rows,
+            timer=timer,
+            episode_index=max((int(row["episode"]) for row in rows), default=0),
+            plots=True,
+            run=None,
+            args=args,
+            final=True,
+        )
     if run is not None:
         _log_wandb_summary(run, args=args, rows=rows, summary=summary)
 
@@ -315,7 +409,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--post-success-steps", type=int, default=8)
     parser.add_argument("--planning-horizon-chunks", type=int, default=1)
     parser.add_argument("--execution-horizon-chunks", type=int, default=1)
+    parser.add_argument("--geometry-mode", choices=["fast", "exact"], default="fast")
     parser.add_argument("--k-schedule", type=int, nargs="+", default=[16, 32, 64])
+    parser.add_argument("--policy-batch-size", type=int, default=64)
     parser.add_argument("--goal-thresh", type=float, default=None)
     parser.add_argument("--avoid-radius", type=float, default=0.08)
     parser.add_argument("--avoid-min-radius", type=float, default=0.025)
@@ -329,8 +425,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Cap ghost robot clouds to the current cropped robot-mask count.",
     )
     parser.add_argument("--video", action="store_true")
+    parser.add_argument("--video-every-episodes", type=int, default=10)
     parser.add_argument("--rerun", action="store_true")
+    parser.add_argument("--rerun-every-episodes", type=int, default=10)
     parser.add_argument("--plots", action="store_true")
+    parser.add_argument("--plot-every-episodes", type=int, default=10)
+    parser.add_argument("--profile", action="store_true")
+    parser.add_argument("--profile-every-episodes", type=int, default=10)
+    parser.add_argument("--sync-cuda-timers", action="store_true")
     parser.add_argument("--video-fps", type=int, default=10)
     parser.add_argument(
         "--wandb-mode",
@@ -354,8 +456,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     if not args.k_schedule or any(k <= 0 for k in args.k_schedule):
         raise ValueError("--k-schedule values must be positive")
+    if args.policy_batch_size <= 0:
+        raise ValueError("--policy-batch-size must be positive")
     if args.avoid_radius <= 0.0 or args.avoid_min_radius <= 0.0:
         raise ValueError("avoid radii must be positive")
+    for name in [
+        "video_every_episodes",
+        "rerun_every_episodes",
+        "plot_every_episodes",
+        "profile_every_episodes",
+    ]:
+        if getattr(args, name) <= 0:
+            raise ValueError(f"--{name.replace('_', '-')} must be positive")
     if args.video_fps <= 0:
         raise ValueError("--video-fps must be positive")
     return args
@@ -387,6 +499,7 @@ def run_eval_episode(
     post_success_steps: int,
     planning_horizon_chunks: int,
     execution_horizon_chunks: int,
+    geometry_mode: GeometryMode,
     k_schedule: tuple[int, ...],
     gripper_open: float,
     match_current_robot_points: bool,
@@ -395,9 +508,16 @@ def run_eval_episode(
     video_fps: int,
     decisions_file: Any,
     rng: np.random.Generator,
+    timer: TimingRecorder,
 ) -> dict[str, Any]:
     sim_obs, sim_info = sim_env.reset(seed=spec.seed, options={"reconfigure": True})
-    sim_entry = rollout_observation_entry(sim_obs, sim_info, env=sim_env, crop_config=crop_config)
+    with timer.time("observation_adapt_crop", source="reset"):
+        sim_entry = rollout_observation_entry(
+            sim_obs,
+            sim_info,
+            env=sim_env,
+            crop_config=crop_config,
+        )
     obs_window = make_initial_obs_window(sim_entry, n_obs_steps=int(policy.n_obs_steps))
     target = np.asarray(sim_entry["target_position"], dtype=np.float32).reshape(3)
     scene = scene_context_for_constraints(
@@ -408,7 +528,10 @@ def run_eval_episode(
     path = EpisodePath()
     _append_path(path, sim_entry)
     timeline = [sim_entry.copy()]
-    frames = [_frame_to_numpy(sim_env.render())] if video else []
+    frames = []
+    if video:
+        with timer.time("video_frame_render", method=method):
+            frames.append(_frame_to_numpy(sim_env.render()))
     provider: ManiSkillGhostPandaGeometryProvider | None = None
     world_model: GeometricWorldModel | None = None
     if method != "base":
@@ -446,9 +569,11 @@ def run_eval_episode(
                 crop_config=crop_config,
                 goal_thresh=goal_thresh,
                 planning_horizon_chunks=planning_horizon_chunks,
+                geometry_mode=geometry_mode,
                 k_schedule=k_schedule,
                 match_current_robot_points=match_current_robot_points,
                 rng=rng,
+                timer=timer,
             )
             replans += 1
             if decision.result is not None:
@@ -479,14 +604,16 @@ def run_eval_episode(
                     high=getattr(sim_env.action_space, "high", None),
                     gripper_open=gripper_open,
                 )
-                sim_obs, _reward, terminated, truncated, sim_info = sim_env.step(sim_action)
+                with timer.time("sim_step", method=method):
+                    sim_obs, _reward, terminated, truncated, sim_info = sim_env.step(sim_action)
                 steps += 1
-                sim_entry = rollout_observation_entry(
-                    sim_obs,
-                    sim_info,
-                    env=sim_env,
-                    crop_config=crop_config,
-                )
+                with timer.time("observation_adapt_crop", source="step"):
+                    sim_entry = rollout_observation_entry(
+                        sim_obs,
+                        sim_info,
+                        env=sim_env,
+                        crop_config=crop_config,
+                    )
                 obs_window = append_obs_window(
                     obs_window,
                     sim_entry,
@@ -495,7 +622,8 @@ def run_eval_episode(
                 _append_path(path, sim_entry)
                 timeline.append(sim_entry.copy())
                 if video:
-                    frames.append(_frame_to_numpy(sim_env.render()))
+                    with timer.time("video_frame_render", method=method):
+                        frames.append(_frame_to_numpy(sim_env.render()))
                 success = _bool_info(sim_info, "success")
                 if success and first_success_step is None:
                     first_success_step = steps
@@ -518,11 +646,13 @@ def run_eval_episode(
     video_path = None
     if video:
         video_path = output_dir / "videos" / method / f"episode_{spec.output_index:03d}.mp4"
-        save_video(video_path, frames, fps=video_fps)
+        with timer.time("video_write", method=method):
+            save_video(video_path, frames, fps=video_fps)
     rerun_path = None
     if rerun:
         rerun_path = output_dir / "rerun" / method / f"episode_{spec.output_index:03d}.rrd"
-        save_rerun_timeline(rerun_path, timeline)
+        with timer.time("rerun_write", method=method):
+            save_rerun_timeline(rerun_path, timeline)
     return episode_metric_row(
         method=method,
         episode=spec.output_index,
@@ -556,9 +686,11 @@ def _select_decision(
     crop_config: PointCloudCropConfig,
     goal_thresh: float,
     planning_horizon_chunks: int,
+    geometry_mode: GeometryMode,
     k_schedule: tuple[int, ...],
     match_current_robot_points: bool,
     rng: np.random.Generator,
+    timer: TimingRecorder,
 ) -> EvalDecisionSummary:
     if method == "base":
         chunk = adapter.sample_action_chunks(obs_window, k=1, rng=rng)[0]
@@ -581,19 +713,21 @@ def _select_decision(
         scene=scene,
         policy_input=obs_window,
     )
-    if planning_horizon_chunks == 1:
+    if geometry_mode == "exact" and planning_horizon_chunks == 1:
         controller_cls = RejectionController if method == "rejection" else RerankingController
-        result = controller_cls(
-            policy=adapter,
-            world_model=world_model,
-            constraints=constraints,
-            k_schedule=k_schedule,
-        ).select(controller_input, rng=rng)
+        with timer.time("candidate_scoring", method=method, geometry_mode=geometry_mode):
+            result = controller_cls(
+                policy=adapter,
+                world_model=world_model,
+                constraints=constraints,
+                k_schedule=k_schedule,
+            ).select(controller_input, rng=rng)
     else:
         result = _select_multichunk(
             method=method,
             adapter=adapter,
             world_model=world_model,
+            provider=provider,
             current_entry=current_entry,
             obs_window=obs_window,
             scene=scene,
@@ -601,8 +735,10 @@ def _select_decision(
             crop_config=crop_config,
             goal_thresh=goal_thresh,
             planning_horizon_chunks=planning_horizon_chunks,
+            geometry_mode=geometry_mode,
             k_schedule=k_schedule,
             rng=rng,
+            timer=timer,
         )
     feasible = sum(1 for candidate in result.candidates if candidate.feasible)
     return EvalDecisionSummary(
@@ -619,6 +755,7 @@ def _select_multichunk(
     method: EvalMethod,
     adapter: DP3ChunkPolicyAdapter,
     world_model: GeometricWorldModel,
+    provider: ManiSkillGhostPandaGeometryProvider,
     current_entry: Entry,
     obs_window: list[Entry],
     scene: Any,
@@ -626,27 +763,38 @@ def _select_multichunk(
     crop_config: PointCloudCropConfig,
     goal_thresh: float,
     planning_horizon_chunks: int,
+    geometry_mode: GeometryMode,
     k_schedule: tuple[int, ...],
     rng: np.random.Generator,
+    timer: TimingRecorder,
 ) -> ControllerResult:
     candidates: list[CandidateDiagnostics] = []
     attempted: list[int] = []
     for k in k_schedule:
         attempted.append(k)
-        batch = _build_multichunk_candidates(
-            adapter=adapter,
-            world_model=world_model,
-            current_entry=current_entry,
-            obs_window=obs_window,
-            scene=scene,
-            constraints=constraints,
-            crop_config=crop_config,
-            goal_thresh=goal_thresh,
-            planning_horizon_chunks=planning_horizon_chunks,
+        with timer.time(
+            "candidate_scoring",
+            method=method,
+            geometry_mode=geometry_mode,
             attempted_k=k,
-            start_index=len(candidates),
-            rng=rng,
-        )
+        ):
+            batch = _build_multichunk_candidates(
+                adapter=adapter,
+                world_model=world_model,
+                provider=provider,
+                current_entry=current_entry,
+                obs_window=obs_window,
+                scene=scene,
+                constraints=constraints,
+                crop_config=crop_config,
+                goal_thresh=goal_thresh,
+                planning_horizon_chunks=planning_horizon_chunks,
+                geometry_mode=geometry_mode,
+                attempted_k=k,
+                start_index=len(candidates),
+                rng=rng,
+                timer=timer,
+            )
         candidates.extend(batch)
         feasible = [candidate for candidate in candidates if candidate.feasible]
         if feasible:
@@ -665,6 +813,7 @@ def _build_multichunk_candidates(
     *,
     adapter: DP3ChunkPolicyAdapter,
     world_model: GeometricWorldModel,
+    provider: ManiSkillGhostPandaGeometryProvider,
     current_entry: Entry,
     obs_window: list[Entry],
     scene: Any,
@@ -672,45 +821,81 @@ def _build_multichunk_candidates(
     crop_config: PointCloudCropConfig,
     goal_thresh: float,
     planning_horizon_chunks: int,
+    geometry_mode: GeometryMode,
     attempted_k: int,
     start_index: int,
     rng: np.random.Generator,
+    timer: TimingRecorder,
 ) -> list[CandidateDiagnostics]:
     first_chunks = adapter.sample_action_chunks(obs_window, k=attempted_k, rng=rng)
-    branch_rollouts: list[ImaginedRollout] = []
-    for branch_idx, first_chunk in enumerate(first_chunks):
-        branch_entry = _copy_entry(current_entry)
-        branch_window = _copy_window(obs_window)
-        rollouts: list[ImaginedRollout] = []
-        next_chunk = first_chunk
-        for chunk_idx in range(planning_horizon_chunks):
-            if chunk_idx > 0:
-                next_chunk = adapter.sample_action_chunks(branch_window, k=1, rng=rng)[0]
-            rollout = world_model.imagine(
-                entry_to_world_model_observation(branch_entry),
-                next_chunk,
-                metadata={"branch": branch_idx, "chunk_index": chunk_idx},
+    branch_entries = [_copy_entry(current_entry) for _ in first_chunks]
+    branch_windows = [_copy_window(obs_window) for _ in first_chunks]
+    branch_rollout_lists: list[list[ImaginedRollout]] = [[] for _ in first_chunks]
+    next_chunks = list(first_chunks)
+    for chunk_idx in range(planning_horizon_chunks):
+        if chunk_idx > 0:
+            next_chunks = adapter.sample_action_chunks_for_windows(
+                branch_windows,
+                rng=rng,
             )
-            rollouts.append(rollout)
-            for step_idx in range(rollout.action_chunk.horizon):
-                branch_entry = world_model_entry_from_rollout_step(
-                    rollout,
-                    step_idx,
-                    previous_entry=branch_entry,
-                    crop_config=crop_config,
-                    goal_thresh=goal_thresh,
+        for branch_idx, next_chunk in enumerate(next_chunks):
+            if geometry_mode == "exact":
+                rollout = world_model.imagine(
+                    entry_to_world_model_observation(branch_entries[branch_idx]),
+                    next_chunk,
+                    metadata={"branch": branch_idx, "chunk_index": chunk_idx},
                 )
-                branch_window = append_obs_window(
-                    branch_window,
-                    branch_entry,
-                    n_obs_steps=int(adapter.policy.n_obs_steps),
+                branch_rollout_lists[branch_idx].append(rollout)
+                for step_idx in range(rollout.action_chunk.horizon):
+                    branch_entries[branch_idx] = world_model_entry_from_rollout_step(
+                        rollout,
+                        step_idx,
+                        previous_entry=branch_entries[branch_idx],
+                        crop_config=crop_config,
+                        goal_thresh=goal_thresh,
+                    )
+                    branch_windows[branch_idx] = append_obs_window(
+                        branch_windows[branch_idx],
+                        branch_entries[branch_idx],
+                        n_obs_steps=int(adapter.policy.n_obs_steps),
+                    )
+            else:
+                rollout = _fast_imagine_rollout(
+                    provider=provider,
+                    observation=entry_to_world_model_observation(branch_entries[branch_idx]),
+                    action_chunk=next_chunk,
+                    metadata={"branch": branch_idx, "chunk_index": chunk_idx},
+                    timer=timer,
                 )
-        branch_rollouts.append(
-            concatenate_rollouts(
-                rollouts,
-                metadata={"candidate_index": start_index + branch_idx},
-            )
+                branch_rollout_lists[branch_idx].append(rollout)
+                if chunk_idx < planning_horizon_chunks - 1:
+                    feedback_start = max(
+                        0,
+                        rollout.action_chunk.horizon - int(adapter.policy.n_obs_steps),
+                    )
+                    for step_idx in range(feedback_start, rollout.action_chunk.horizon):
+                        branch_entries[branch_idx] = _render_feedback_entry(
+                            provider=provider,
+                            rollout=rollout,
+                            step_index=step_idx,
+                            previous_entry=branch_entries[branch_idx],
+                            crop_config=crop_config,
+                            goal_thresh=goal_thresh,
+                            timer=timer,
+                        )
+                        branch_windows[branch_idx] = append_obs_window(
+                            branch_windows[branch_idx],
+                            branch_entries[branch_idx],
+                            n_obs_steps=int(adapter.policy.n_obs_steps),
+                        )
+
+    branch_rollouts = [
+        concatenate_rollouts(
+            rollouts,
+            metadata={"candidate_index": start_index + branch_idx},
         )
+        for branch_idx, rollouts in enumerate(branch_rollout_lists)
+    ]
 
     chunks = [rollout.action_chunk for rollout in branch_rollouts]
     consensus = consensus_deviations(chunks)
@@ -771,6 +956,74 @@ def _candidate_diagnostics(
         consensus_deviation=consensus_deviation,
         policy_surrogate=None,
         total_score=float(total_score),
+    )
+
+
+def _fast_imagine_rollout(
+    *,
+    provider: ManiSkillGhostPandaGeometryProvider,
+    observation: Any,
+    action_chunk: ActionChunk,
+    metadata: dict[str, Any],
+    timer: TimingRecorder,
+) -> ImaginedRollout:
+    """Imagine q/EEF trajectories without rendering robot point clouds for every step."""
+    q = interpret_joint_chunk(action_chunk, observation.robot_state.joint_positions)
+    eef_positions: list[np.ndarray] = []
+    for q_step in q:
+        with timer.time("ghost_eef_lookup", geometry_mode="fast"):
+            eef_positions.append(provider.end_effector_position_only(q_step))
+    horizon = action_chunk.horizon
+    return ImaginedRollout(
+        q=q,
+        eef_path=np.stack(eef_positions, axis=0).astype(np.float32, copy=False),
+        robot_point_clouds=[np.zeros((0, 3), dtype=np.float32) for _ in range(horizon)],
+        scene_point_clouds=[np.zeros((0, 3), dtype=np.float32) for _ in range(horizon)],
+        robot_masks=[np.zeros((0,), dtype=bool) for _ in range(horizon)],
+        action_chunk=action_chunk,
+        metadata={**metadata, "geometry_mode": "fast"},
+    )
+
+
+def _render_feedback_entry(
+    *,
+    provider: ManiSkillGhostPandaGeometryProvider,
+    rollout: ImaginedRollout,
+    step_index: int,
+    previous_entry: Entry,
+    crop_config: PointCloudCropConfig,
+    goal_thresh: float,
+    timer: TimingRecorder,
+) -> Entry:
+    """Render one imagined q state into a policy-shaped observation entry."""
+    q = rollout.q[step_index]
+    with timer.time("ghost_pointcloud_render", geometry_mode="fast"):
+        robot_points = provider.robot_point_cloud(q)
+    static_scene = static_scene_from_robot_mask(
+        entry_to_world_model_observation(previous_entry).point_cloud,
+        entry_to_world_model_observation(previous_entry).robot_mask,
+    )
+    scene, robot_mask = compose_robot_cloud(static_scene, robot_points)
+    one_step_rollout = ImaginedRollout(
+        q=q.reshape(1, -1),
+        eef_path=rollout.eef_path[step_index].reshape(1, 3),
+        robot_point_clouds=[robot_points],
+        scene_point_clouds=[scene],
+        robot_masks=[robot_mask],
+        action_chunk=ActionChunk(
+            actions=rollout.action_chunk.actions[step_index].reshape(1, -1),
+            action_mode=rollout.action_chunk.action_mode,
+            dt=rollout.action_chunk.dt,
+            metadata=rollout.action_chunk.metadata,
+        ),
+        metadata=rollout.metadata,
+    )
+    return world_model_entry_from_rollout_step(
+        one_step_rollout,
+        0,
+        previous_entry=previous_entry,
+        crop_config=crop_config,
+        goal_thresh=goal_thresh,
     )
 
 
@@ -863,6 +1116,27 @@ def _repeat_obs_window_to_torch(
     return {
         key: value.repeat((k, *([1] * (value.ndim - 1))))
         for key, value in batch.items()
+    }
+
+
+def _obs_windows_to_torch(
+    windows: list[list[Entry]],
+    *,
+    device: torch.device,
+) -> dict[str, torch.Tensor]:
+    if not windows:
+        raise ValueError("windows must not be empty")
+    point_cloud = np.stack(
+        [np.stack([entry["point_cloud"] for entry in window], axis=0) for window in windows],
+        axis=0,
+    )
+    agent_pos = np.stack(
+        [np.stack([entry["agent_pos"] for entry in window], axis=0) for window in windows],
+        axis=0,
+    )
+    return {
+        "point_cloud": torch.from_numpy(point_cloud.astype(np.float32)).to(device),
+        "agent_pos": torch.from_numpy(agent_pos.astype(np.float32)).to(device),
     }
 
 
@@ -991,7 +1265,106 @@ def _log_wandb_summary(
         )
 
 
-def _maybe_write_plots(output_dir: Path, by_method: dict[str, Any]) -> None:
+def _log_wandb_episode(
+    run: Any | None,
+    *,
+    args: argparse.Namespace,
+    row: dict[str, Any],
+    global_step: int,
+) -> None:
+    if run is None:
+        return
+    try:
+        metrics = {
+            f"episode/{row['method']}/reach_success": float(row["reach_success"]),
+            f"episode/{row['method']}/constraint_satisfied": float(
+                row["constraint_satisfied"]
+            ),
+            f"episode/{row['method']}/combined_success": float(row["combined_success"]),
+            f"episode/{row['method']}/final_target_distance": row["final_target_distance"],
+            f"episode/{row['method']}/min_clearance": row["min_clearance"],
+            f"episode/{row['method']}/candidate_feasibility_fraction": row[
+                "candidate_feasibility_fraction"
+            ],
+            f"episode/{row['method']}/fallback_count": row["fallback_count"],
+            "episode/index": row["episode"],
+        }
+        metrics = {key: value for key, value in metrics.items() if value is not None}
+        video = row.get("video")
+        if video and Path(str(video)).exists():
+            import wandb
+
+            metrics[f"episode_video/{row['method']}/episode_{int(row['episode']):03d}"] = (
+                wandb.Video(str(video), fps=args.video_fps, format="mp4")
+            )
+        with _null_timer():
+            run.log(metrics, step=global_step)
+    except Exception as exc:
+        if args.wandb_required:
+            raise
+        print(
+            f"warning: W&B episode logging failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+
+
+def _maybe_emit_progress(
+    *,
+    output_dir: Path,
+    rows: list[dict[str, Any]],
+    timer: TimingRecorder,
+    episode_index: int,
+    plots: bool,
+    run: Any | None,
+    args: argparse.Namespace,
+    final: bool = False,
+) -> None:
+    if not rows:
+        return
+    by_method = summarize_metrics(rows)
+    plot_paths: list[Path] = []
+    if plots:
+        with timer.time("plot_write", final=final):
+            plot_paths = _write_progress_plots(
+                output_dir,
+                rows=rows,
+                timing=timer.summary(),
+                episode_index=episode_index,
+                final=final,
+            )
+    if run is None:
+        return
+    try:
+        metrics: dict[str, Any] = {}
+        for method, method_summary in by_method.items():
+            for key, value in method_summary.items():
+                if isinstance(value, (int, float)) and value is not None:
+                    metrics[f"progress/{method}/{key}"] = value
+        metrics["progress/episode"] = episode_index
+        if plot_paths:
+            import wandb
+
+            for path in plot_paths:
+                metrics[f"progress_plot/{path.stem}"] = wandb.Image(str(path))
+        with timer.time("wandb_log", kind="progress"):
+            run.log(metrics)
+    except Exception as exc:
+        if args.wandb_required:
+            raise
+        print(
+            f"warning: W&B progress logging failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+
+
+def _write_progress_plots(
+    output_dir: Path,
+    *,
+    rows: list[dict[str, Any]],
+    timing: dict[str, dict[str, float]],
+    episode_index: int,
+    final: bool,
+) -> list[Path]:
     try:
         import matplotlib.pyplot as plt
     except Exception as exc:
@@ -999,19 +1372,100 @@ def _maybe_write_plots(output_dir: Path, by_method: dict[str, Any]) -> None:
             f"warning: matplotlib unavailable for plots: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
-        return
+        return []
 
-    methods = list(by_method.keys())
-    rates = [float(by_method[method].get("combined_success_rate", 0.0)) for method in methods]
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.bar(methods, rates, color=["#777777", "#2c7fb8", "#41ab5d"][: len(methods)])
-    ax.set_ylim(0.0, 1.0)
-    ax.set_ylabel("Combined success rate")
-    ax.set_title("Constrained reach eval")
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+    series = progress_series(rows)
+    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    for method, method_series in series.items():
+        x = np.arange(1, len(method_series["episode"]) + 1)
+        axes[0, 0].plot(x, method_series["combined_success_rate"], label=method)
+        axes[0, 1].plot(x, method_series["final_target_distance"], label=method)
+        axes[1, 0].plot(x, method_series["min_clearance"], label=method)
+        axes[1, 1].plot(x, method_series["candidate_feasibility_fraction"], label=method)
+    axes[0, 0].set_ylim(0.0, 1.0)
+    axes[0, 0].set_title("Cumulative combined success")
+    axes[0, 1].set_title("Final target distance")
+    axes[1, 0].set_title("Minimum clearance")
+    axes[1, 1].set_title("Candidate feasibility fraction")
+    for ax in axes.flat:
+        ax.set_xlabel("Completed episode rows per method")
+        ax.grid(True, alpha=0.25)
+        ax.legend(loc="best")
     fig.tight_layout()
-    path = output_dir / "summary_rates.png"
-    fig.savefig(path)
+    suffix = "final" if final else f"episode_{episode_index:04d}"
+    progress_path = plots_dir / f"progress_{suffix}.png"
+    latest_progress = plots_dir / "latest_progress.png"
+    fig.savefig(progress_path)
+    fig.savefig(latest_progress)
     plt.close(fig)
+    paths = [progress_path, latest_progress]
+
+    if timing:
+        names = list(timing.keys())
+        totals = [timing[name]["total"] for name in names]
+        order = np.argsort(totals)[-10:]
+        fig, ax = plt.subplots(figsize=(9, 5))
+        ax.barh([names[idx] for idx in order], [totals[idx] for idx in order])
+        ax.set_xlabel("Total seconds")
+        ax.set_title("Timing breakdown")
+        fig.tight_layout()
+        timing_path = plots_dir / f"timing_{suffix}.png"
+        latest_timing = plots_dir / "latest_timing.png"
+        fig.savefig(timing_path)
+        fig.savefig(latest_timing)
+        plt.close(fig)
+        paths.extend([timing_path, latest_timing])
+    return paths
+
+
+def _write_new_timing_events(
+    timer: TimingRecorder,
+    path: Path,
+    *,
+    start_index: int,
+) -> int:
+    if not timer.enabled:
+        return start_index
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as file:
+        for idx, event in enumerate(timer.events[start_index:], start=start_index):
+            file.write(json.dumps({"index": idx, **event.to_json()}, sort_keys=True) + "\n")
+    return len(timer.events)
+
+
+def _print_timing_summary(timer: TimingRecorder) -> None:
+    summary = timer.summary()
+    if not summary:
+        return
+    top = sorted(summary.items(), key=lambda item: item[1]["total"], reverse=True)[:6]
+    text = ", ".join(
+        f"{name}={values['total']:.2f}s/{int(values['count'])}x" for name, values in top
+    )
+    print(f"timing: {text}")
+
+
+def _cuda_sync_fn(device: torch.device) -> Any | None:
+    if device.type != "cuda":
+        return None
+    if not torch.cuda.is_available():
+        return None
+    return torch.cuda.synchronize
+
+
+def _seed_torch(seed: int) -> None:
+    torch.manual_seed(int(seed))
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(int(seed))
+
+
+class _null_timer:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *_args: Any) -> bool:
+        return False
 
 
 def _format_optional(value: Any) -> str:

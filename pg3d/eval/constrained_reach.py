@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import math
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -19,6 +21,11 @@ from pg3d.utils.serialization import jsonable
 from pg3d.world_model import ActionChunk, ImaginedRollout
 
 EvalMethod = Literal["base", "rejection", "reranking"]
+SUCCESS_RATE_METRICS: tuple[tuple[str, str], ...] = (
+    ("reach_success", "Reach"),
+    ("constraint_satisfied", "Constraint"),
+    ("combined_success", "Combined"),
+)
 
 
 @dataclass(frozen=True)
@@ -63,6 +70,81 @@ class EpisodePath:
         if not self.q:
             return np.zeros((0, 0), dtype=np.float32)
         return np.stack(self.q, axis=0).astype(np.float32, copy=False)
+
+
+@dataclass
+class TimingEvent:
+    """One profiled timing event."""
+
+    name: str
+    seconds: float
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "seconds": float(self.seconds),
+            "metadata": jsonable(self.metadata),
+        }
+
+
+class TimingRecorder:
+    """Lightweight wall-clock timing recorder for eval profiling."""
+
+    def __init__(
+        self,
+        *,
+        enabled: bool = False,
+        sync_fn: Any | None = None,
+    ) -> None:
+        self.enabled = bool(enabled)
+        self.sync_fn = sync_fn
+        self.events: list[TimingEvent] = []
+
+    @contextmanager
+    def time(self, name: str, **metadata: Any) -> Any:
+        """Record elapsed wall-clock time for a named block when profiling is enabled."""
+        if not self.enabled:
+            yield
+            return
+        self._sync()
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._sync()
+            self.events.append(
+                TimingEvent(
+                    name=name,
+                    seconds=time.perf_counter() - start,
+                    metadata=metadata,
+                )
+            )
+
+    def summary(self) -> dict[str, dict[str, float]]:
+        """Aggregate timing events by name."""
+        by_name: dict[str, list[float]] = {}
+        for event in self.events:
+            by_name.setdefault(event.name, []).append(float(event.seconds))
+        return {
+            name: {
+                "count": float(len(values)),
+                "total": float(np.sum(values)),
+                "mean": float(np.mean(values)),
+                "max": float(np.max(values)),
+            }
+            for name, values in sorted(by_name.items())
+        }
+
+    def drain_events(self) -> list[TimingEvent]:
+        """Return and clear pending timing events for incremental JSONL writing."""
+        events = list(self.events)
+        self.events.clear()
+        return events
+
+    def _sync(self) -> None:
+        if self.sync_fn is not None:
+            self.sync_fn()
 
 
 def validate_planning_horizons(
@@ -270,6 +352,60 @@ def summarize_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return summary
 
 
+def success_rate_ci_rows(
+    summary: dict[str, Any],
+    *,
+    methods: list[str] | None = None,
+    metrics: tuple[tuple[str, str], ...] = SUCCESS_RATE_METRICS,
+) -> list[dict[str, Any]]:
+    """Return bar-plot rows for success rates and Wilson intervals.
+
+    Accepts either a full eval `summary.json` dict or the nested `by_method` value.
+    """
+    by_method = summary.get("by_method", summary)
+    if not isinstance(by_method, dict):
+        raise ValueError("summary must contain a by_method mapping")
+
+    ordered_methods = methods or [
+        method for method in ["base", "rejection", "reranking"] if method in by_method
+    ]
+    ordered_methods.extend(
+        method for method in sorted(by_method) if method not in ordered_methods
+    )
+
+    rows: list[dict[str, Any]] = []
+    for method in ordered_methods:
+        method_summary = by_method.get(method)
+        if method_summary is None:
+            continue
+        for key, label in metrics:
+            rate_key = f"{key}_rate"
+            low_key = f"{key}_wilson_low"
+            high_key = f"{key}_wilson_high"
+            if (
+                rate_key not in method_summary
+                or low_key not in method_summary
+                or high_key not in method_summary
+            ):
+                raise ValueError(f"summary for method {method!r} is missing {key} CI fields")
+            rate = float(method_summary[rate_key])
+            low = float(method_summary[low_key])
+            high = float(method_summary[high_key])
+            rows.append(
+                {
+                    "method": method,
+                    "metric": key,
+                    "label": label,
+                    "rate": rate,
+                    "wilson_low": low,
+                    "wilson_high": high,
+                    "err_low": rate - low,
+                    "err_high": high - rate,
+                }
+            )
+    return rows
+
+
 def concatenate_rollouts(
     rollouts: list[ImaginedRollout],
     *,
@@ -321,6 +457,55 @@ def candidate_feasibility_fraction(feasible: int, total: int) -> float | None:
     return float(feasible) / float(total)
 
 
+def should_emit_episode_artifact(episode_index: int, every_episodes: int) -> bool:
+    """Return whether a periodic episode artifact should be emitted."""
+    if episode_index < 0:
+        raise ValueError("episode_index must be non-negative")
+    if every_episodes <= 0:
+        raise ValueError("every_episodes must be positive")
+    return episode_index == 0 or (episode_index + 1) % every_episodes == 0
+
+
+def progress_series(rows: list[dict[str, Any]]) -> dict[str, dict[str, list[float]]]:
+    """Build cumulative per-method progress series for local/W&B plots."""
+    by_method: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_method.setdefault(str(row["method"]), []).append(row)
+
+    series: dict[str, dict[str, list[float]]] = {}
+    for method, method_rows in sorted(by_method.items()):
+        ordered = sorted(method_rows, key=lambda row: (int(row["episode"]), int(row["seed"])))
+        method_series: dict[str, list[float]] = {
+            "episode": [],
+            "reach_success_rate": [],
+            "constraint_satisfied_rate": [],
+            "combined_success_rate": [],
+            "final_target_distance": [],
+            "min_clearance": [],
+            "candidate_feasibility_fraction": [],
+            "fallback_count": [],
+        }
+        reach = 0
+        constraint = 0
+        combined = 0
+        for idx, row in enumerate(ordered, start=1):
+            reach += int(bool(row["reach_success"]))
+            constraint += int(bool(row["constraint_satisfied"]))
+            combined += int(bool(row["combined_success"]))
+            method_series["episode"].append(float(row["episode"]))
+            method_series["reach_success_rate"].append(reach / idx)
+            method_series["constraint_satisfied_rate"].append(constraint / idx)
+            method_series["combined_success_rate"].append(combined / idx)
+            method_series["final_target_distance"].append(_optional_float(row))
+            method_series["min_clearance"].append(_optional_float(row, key="min_clearance"))
+            method_series["candidate_feasibility_fraction"].append(
+                _optional_float(row, key="candidate_feasibility_fraction")
+            )
+            method_series["fallback_count"].append(float(row.get("fallback_count", 0)))
+        series[method] = method_series
+    return series
+
+
 def _mean_std(key: str, rows: list[dict[str, Any]]) -> dict[str, float | None]:
     values = [
         float(row[key])
@@ -343,3 +528,14 @@ def _vector3(value: Any, name: str) -> np.ndarray:
     if not np.all(np.isfinite(array)):
         raise ValueError(f"{name} must be finite")
     return array
+
+
+def _optional_float(row: dict[str, Any], *, key: str = "final_target_distance") -> float:
+    value = row.get(key)
+    if value is None:
+        return float("nan")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+    return numeric if np.isfinite(numeric) else float("nan")
