@@ -12,16 +12,22 @@ from typing import Any
 import torch
 
 from pg3d.policies.dp3 import ReachDatasetConfig, ReachSequenceDataset, SimpleDP3
+from pg3d.policies.dp3.checkpoint import (
+    checkpoint_path_for_step,
+    save_reach_policy_checkpoint,
+    should_save_checkpoint,
+)
 from pg3d.policies.dp3.modules import EMAModel
-from pg3d.policies.dp3.normalizer import LinearNormalizer
 from pg3d.policies.dp3.reach_dataset import reach_shape_meta
 from pg3d.policies.dp3.utils import dict_apply
+from pg3d.utils.devices import select_device
+from pg3d.utils.serialization import jsonable
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     torch.manual_seed(args.seed)
-    device = _select_device(args.device)
+    device = select_device(args.device)
     train_dataset = ReachSequenceDataset(
         ReachDatasetConfig(
             dataset_path=args.dataset,
@@ -161,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.checkpoint_dir is not None and should_save_checkpoint(step, args.checkpoint_every):
             checkpoint_path = checkpoint_path_for_step(args.checkpoint_dir, step)
-            _save_checkpoint(
+            save_reach_policy_checkpoint(
                 checkpoint_path,
                 policy=policy,
                 ema_policy=ema.averaged_model if ema is not None else None,
@@ -191,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
             args.max_steps,
             final=True,
         )
-        _save_checkpoint(
+        save_reach_policy_checkpoint(
             final_checkpoint_path,
             policy=policy,
             ema_policy=ema.averaged_model if ema is not None else None,
@@ -358,14 +364,6 @@ def _policy_kwargs(
     }
 
 
-def _select_device(value: str) -> torch.device:
-    if value == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if value == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("cuda requested but torch.cuda.is_available() is false")
-    return torch.device(value)
-
-
 def _batch_to(batch: Any, device: torch.device) -> Any:
     return dict_apply(batch, lambda tensor: tensor.to(device=device, dtype=torch.float32))
 
@@ -484,8 +482,8 @@ def _init_wandb(
                 "num_val_sequences": len(val_dataset) if val_dataset is not None else 0,
                 "num_episodes": train_dataset.num_episodes,
                 "dataset_metadata": train_dataset.metadata,
-                "policy": _jsonable(policy_kwargs),
-                "training": _jsonable(vars(args)),
+                "policy": jsonable(policy_kwargs),
+                "training": jsonable(vars(args)),
                 "command": "scripts/train_dp3_reach.py",
             },
         )
@@ -521,49 +519,6 @@ def _wandb_log(
             ),
         }
     run.log(metrics, step=step)
-
-
-def _save_checkpoint(
-    path: Path,
-    *,
-    policy: SimpleDP3,
-    ema_policy: SimpleDP3 | None,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler.LambdaLR | None,
-    policy_kwargs: dict[str, Any],
-    args: argparse.Namespace,
-    step: int,
-    best_val_loss: float | None,
-) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "checkpoint_version": "pg3d.dp3_reach.v2",
-            "model": _model_state(policy),
-            "ema_model": _model_state(ema_policy) if ema_policy is not None else None,
-            "normalizer": {
-                key: value.detach().cpu() for key, value in policy.normalizer.state_dict().items()
-            },
-            "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict() if scheduler is not None else None,
-            "policy_kwargs": _jsonable(policy_kwargs),
-            "args": _jsonable(vars(args)),
-            "step": step,
-            "best_val_loss": best_val_loss,
-        },
-        path,
-    )
-
-
-def checkpoint_path_for_step(checkpoint_dir: Path, step: int, *, final: bool = False) -> Path:
-    """Return the step-named checkpoint path under a checkpoint directory."""
-    prefix = "final_step" if final else "step"
-    return checkpoint_dir / f"{prefix}_{step:08d}.pt"
-
-
-def should_save_checkpoint(step: int, checkpoint_every: int) -> bool:
-    """Return whether this training step should write a periodic checkpoint."""
-    return checkpoint_every > 0 and step % checkpoint_every == 0
 
 
 def _maybe_log_checkpoint_rollouts(
@@ -712,49 +667,6 @@ def _log_checkpoint_rollouts(
         },
         step=step,
     )
-
-
-def _model_state(policy: SimpleDP3 | None) -> dict[str, torch.Tensor]:
-    if policy is None:
-        return {}
-    return {
-        key: value.detach().cpu()
-        for key, value in policy.state_dict().items()
-        if not key.startswith("normalizer.")
-    }
-
-
-def _jsonable(value: Any) -> Any:
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, tuple):
-        return [_jsonable(item) for item in value]
-    if isinstance(value, list):
-        return [_jsonable(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    return value
-
-
-def load_reach_policy_from_checkpoint(
-    path: Path,
-    *,
-    device: torch.device,
-    prefer_ema: bool = True,
-) -> SimpleDP3:
-    """Load a DP3 reach checkpoint written by this trainer."""
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
-    policy = SimpleDP3(**checkpoint["policy_kwargs"])
-    policy.set_normalizer(LinearNormalizer.from_state_dict(checkpoint["normalizer"]))
-    model_state = (
-        checkpoint.get("ema_model")
-        if prefer_ema and checkpoint.get("ema_model") is not None
-        else checkpoint["model"]
-    )
-    policy.load_state_dict(model_state, strict=False)
-    policy.to(device)
-    policy.eval()
-    return policy
 
 
 if __name__ == "__main__":

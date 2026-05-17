@@ -10,6 +10,18 @@ import zarr
 
 from pg3d.envs.maniskill_adapter import register_pg3d_reach_envs
 from pg3d.envs.maniskill_adapter.dataset import load_reach_metadata
+from pg3d.utils.arrays import (
+    bool_any as _bool_any,
+)
+from pg3d.utils.arrays import (
+    bool_info as _bool_info,
+)
+from pg3d.utils.arrays import (
+    float_info as _float_info,
+)
+from pg3d.utils.arrays import (
+    frame_to_numpy as _frame_to_numpy,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -115,30 +127,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _bool_info(info: dict[str, Any], key: str) -> bool:
-    return bool(np.asarray(_to_numpy(info[key])).reshape(-1)[0]) if key in info else False
-
-
-def _float_info(info: dict[str, Any], key: str, *, default: float) -> float:
-    if key not in info:
-        return float(default)
-    return float(np.asarray(_to_numpy(info[key])).reshape(-1)[0])
-
-
-def _bool_any(value: Any) -> bool:
-    return bool(np.any(_to_numpy(value)))
-
-
-def _to_numpy(value: Any) -> np.ndarray:
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "numpy"):
-        value = value.numpy()
-    return np.asarray(value)
-
-
 def _save_video(path: Path, frames: list[np.ndarray], *, fps: int) -> None:
     if not frames:
         raise RuntimeError("no frames were captured for video export")
@@ -189,19 +177,6 @@ def _save_rerun_episode(
         if np.all(np.isfinite(tcp)):
             rr.log("world/tcp", rr.Points3D(tcp, colors=[255, 220, 0]))
     rr.disconnect()
-
-
-def _frame_to_numpy(frame: Any) -> np.ndarray:
-    if hasattr(frame, "detach"):
-        frame = frame.detach()
-    if hasattr(frame, "cpu"):
-        frame = frame.cpu()
-    if hasattr(frame, "numpy"):
-        frame = frame.numpy()
-    array = np.asarray(frame)
-    if array.ndim == 4 and array.shape[0] == 1:
-        array = array[0]
-    return array.astype(np.uint8, copy=False)
 
 
 if __name__ == "__main__":

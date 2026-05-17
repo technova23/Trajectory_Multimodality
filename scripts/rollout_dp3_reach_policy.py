@@ -19,7 +19,24 @@ from pg3d.envs.maniskill_adapter.dataset import (
     load_reach_metadata,
 )
 from pg3d.policies.dp3 import SimpleDP3
-from pg3d.policies.dp3.normalizer import LinearNormalizer
+from pg3d.policies.dp3.checkpoint import load_reach_policy_from_checkpoint
+from pg3d.utils.arrays import (
+    bool_any as _bool_any,
+)
+from pg3d.utils.arrays import (
+    bool_info as _bool_info,
+)
+from pg3d.utils.arrays import (
+    float_info as _float_info,
+)
+from pg3d.utils.arrays import (
+    float_value as _float_value,
+)
+from pg3d.utils.arrays import (
+    frame_to_numpy as _frame_to_numpy,
+)
+from pg3d.utils.devices import select_device
+from pg3d.utils.serialization import jsonable as _jsonable
 
 Source = Literal["dataset", "fresh"]
 ActionMode = Literal["abs_joint", "delta_joint"]
@@ -53,8 +70,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     register_pg3d_reach_envs()
-    device = _select_device(args.device)
-    policy = load_reach_policy(
+    device = select_device(args.device)
+    policy = load_reach_policy_from_checkpoint(
         args.checkpoint,
         device=device,
         prefer_ema=args.checkpoint_model == "ema",
@@ -313,27 +330,6 @@ def run_policy_rollout(
     }
 
 
-def load_reach_policy(
-    path: Path,
-    *,
-    device: torch.device,
-    prefer_ema: bool = True,
-) -> SimpleDP3:
-    """Load a reach policy checkpoint written by `scripts/train_dp3_reach.py`."""
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
-    policy = SimpleDP3(**checkpoint["policy_kwargs"])
-    policy.set_normalizer(LinearNormalizer.from_state_dict(checkpoint["normalizer"]))
-    model_state = (
-        checkpoint.get("ema_model")
-        if prefer_ema and checkpoint.get("ema_model") is not None
-        else checkpoint["model"]
-    )
-    policy.load_state_dict(model_state, strict=False)
-    policy.to(device)
-    policy.eval()
-    return policy
-
-
 def crop_config_from_metadata(metadata: dict[str, Any]) -> PointCloudCropConfig:
     crop = metadata.get("crop", {})
     bounds = np.asarray(crop.get("bounds", DEFAULT_WORKSPACE_BOUNDS), dtype=np.float32)
@@ -585,14 +581,6 @@ def _copy_entry(
     }
 
 
-def _select_device(value: str) -> torch.device:
-    if value == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if value == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("cuda requested but torch.cuda.is_available() is false")
-    return torch.device(value)
-
-
 def _env_task_name(env: Any) -> str:
     unwrapped = getattr(env, "unwrapped", env)
     spec = getattr(unwrapped, "spec", None)
@@ -605,60 +593,11 @@ def _action_mode(value: str) -> ActionMode:
     return value  # type: ignore[return-value]
 
 
-def _bool_info(info: dict[str, Any], key: str) -> bool:
-    return bool(np.asarray(_to_numpy(info[key])).reshape(-1)[0]) if key in info else False
-
-
-def _float_info(info: dict[str, Any], key: str, *, default: float) -> float:
-    if key not in info:
-        return float(default)
-    return float(np.asarray(_to_numpy(info[key])).reshape(-1)[0])
-
-
-def _float_value(value: Any) -> float:
-    return float(np.asarray(_to_numpy(value)).reshape(-1)[0])
-
-
-def _bool_any(value: Any) -> bool:
-    return bool(np.any(_to_numpy(value)))
-
-
 def _distance_drift(distances: list[float]) -> float:
     finite = np.asarray([value for value in distances if np.isfinite(value)], dtype=np.float32)
     if finite.size <= 1:
         return 0.0
     return float(np.max(finite) - np.min(finite))
-
-
-def _to_numpy(value: Any) -> np.ndarray:
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "numpy"):
-        value = value.numpy()
-    return np.asarray(value)
-
-
-def _frame_to_numpy(frame: Any) -> np.ndarray:
-    array = _to_numpy(frame)
-    if array.ndim == 4 and array.shape[0] == 1:
-        array = array[0]
-    return array.astype(np.uint8, copy=False)
-
-
-def _jsonable(value: Any) -> Any:
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    return value
 
 
 if __name__ == "__main__":

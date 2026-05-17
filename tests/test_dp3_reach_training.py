@@ -13,6 +13,12 @@ import torch
 import scripts.train_dp3_reach as train
 from pg3d.envs.maniskill_adapter.dataset import ReachEpisodeData, write_reach_zarr
 from pg3d.policies.dp3 import SimpleDP3
+from pg3d.policies.dp3.checkpoint import (
+    checkpoint_path_for_step,
+    load_reach_policy_from_checkpoint,
+    save_reach_policy_checkpoint,
+    should_save_checkpoint,
+)
 from pg3d.policies.dp3.normalizer import LinearNormalizer
 from pg3d.policies.dp3.reach_dataset import reach_shape_meta
 
@@ -50,7 +56,7 @@ def test_checkpoint_saves_and_loads_ema_by_default(tmp_path: Path) -> None:
 
     optimizer = torch.optim.AdamW(policy.parameters(), lr=1e-4)
     checkpoint = tmp_path / "policy.pt"
-    train._save_checkpoint(
+    save_reach_policy_checkpoint(
         checkpoint,
         policy=policy,
         ema_policy=ema_policy,
@@ -62,12 +68,12 @@ def test_checkpoint_saves_and_loads_ema_by_default(tmp_path: Path) -> None:
         best_val_loss=0.1,
     )
 
-    raw = train.load_reach_policy_from_checkpoint(
+    raw = load_reach_policy_from_checkpoint(
         checkpoint,
         device=torch.device("cpu"),
         prefer_ema=False,
     )
-    ema = train.load_reach_policy_from_checkpoint(
+    ema = load_reach_policy_from_checkpoint(
         checkpoint,
         device=torch.device("cpu"),
         prefer_ema=True,
@@ -79,13 +85,13 @@ def test_checkpoint_saves_and_loads_ema_by_default(tmp_path: Path) -> None:
 
 
 def test_checkpoint_path_helper_uses_step_filenames(tmp_path: Path) -> None:
-    assert train.checkpoint_path_for_step(tmp_path, 5000) == tmp_path / "step_00005000.pt"
+    assert checkpoint_path_for_step(tmp_path, 5000) == tmp_path / "step_00005000.pt"
     assert (
-        train.checkpoint_path_for_step(tmp_path, 123, final=True)
+        checkpoint_path_for_step(tmp_path, 123, final=True)
         == tmp_path / "final_step_00000123.pt"
     )
-    assert train.should_save_checkpoint(10, 5)
-    assert not train.should_save_checkpoint(10, 0)
+    assert should_save_checkpoint(10, 5)
+    assert not should_save_checkpoint(10, 0)
 
 
 def test_checkpoint_dir_replaces_checkpoint_out_cli(tmp_path: Path) -> None:

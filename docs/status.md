@@ -7,7 +7,7 @@ Last updated: 2026-05-17
 Bootstrap a sim-only research codebase for programmatic geometric guidance of 3D diffusion policies. The first MVP is constrained reaching in ManiSkill/SAPIEN:
 
 - base policy: DP3-style point-cloud diffusion policy,
-- simulator: ManiSkill/SAPIEN, starting with built-in task smoke and then a narrow reach task if needed,
+- simulator: ManiSkill/SAPIEN, with built-in task smoke plus custom narrow/medium reach tasks,
 - action representation: start with absolute joint target chunks; keep delta joint chunks as fallback,
 - world model: kinematic robot-geometry point-cloud imagination from joint-action chunks,
 - first constraint: `avoid_region` over the end-effector path,
@@ -34,10 +34,12 @@ videos, and richer diagnostics for stable non-trivial training runs.
 
 ## Immediate next steps
 
-1. Generate and inspect a 50-100 episode `PG3DReach-Narrow-v0` pilot dataset with `hold_steps=8`.
-2. Train the moderate 5090 DP3 recipe on the pilot, inspect W&B validation metrics plus
-   dataset-seed/fresh-seed policy rollout videos, then launch the 500-episode dataset.
-3. Use the saved reach trajectories to sanity-check future FK/world-model rollouts.
+1. Scale the exercised `PG3DReach-Narrow-v0` 100-episode path to a 500-episode dataset with
+   `hold_steps=8`, replay a fixed subset, and inspect MP4/Rerun artifacts.
+2. Train the moderate 5090 DP3 recipe on the 500-episode dataset, inspecting W&B validation
+   metrics plus dataset-seed/fresh-seed policy rollout videos from periodic checkpoints.
+3. Start the kinematic point-cloud world model/FK compositor work using saved reach trajectories
+   as visual sanity checks.
 
 ## Active risks
 
@@ -105,3 +107,7 @@ See `docs/worklog/`.
   step-named checkpoint paths, periodic/final checkpoint writing, mixed rollout-video seed
   selection, lazy training imports, and non-fatal checkpoint-rollout failures. It also validates
   a two-step checkpoint-directory smoke and an outside-sandbox offline W&B checkpoint-video smoke.
+  A focused cleanup pass then consolidated duplicate JSON/array/device/checkpoint helpers without
+  changing scientific behavior, refreshed the custom reach setup notes, improved `make clean` for
+  nested `__pycache__` directories, and passed ruff, 48 pytest tests, smoke imports, and
+  `git diff --check`.

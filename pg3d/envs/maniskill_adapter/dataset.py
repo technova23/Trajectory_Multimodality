@@ -11,6 +11,7 @@ import numpy as np
 import zarr
 
 from pg3d.envs.maniskill_adapter.types import Observation
+from pg3d.utils.serialization import jsonable
 
 Array = np.ndarray
 ActionMode = Literal["abs_joint", "delta_joint"]
@@ -253,10 +254,10 @@ def write_reach_zarr(
         **metadata,
         "schema_version": "pg3d.reach.zarr.v1",
         "summary": summary,
-        "episodes": [_jsonable(episode.metadata) for episode in episodes],
+        "episodes": [jsonable(episode.metadata) for episode in episodes],
     }
     (output_path / "metadata.json").write_text(
-        json.dumps(_jsonable(json_metadata), indent=2, sort_keys=True),
+        json.dumps(jsonable(json_metadata), indent=2, sort_keys=True),
         encoding="utf-8",
     )
     return summary
@@ -341,17 +342,3 @@ def _as_array(
     if array.ndim != ndim:
         raise ValueError(f"{name} must have ndim={ndim}, got shape {array.shape}")
     return array
-
-
-def _jsonable(value: Any) -> Any:
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    return value

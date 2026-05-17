@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from pg3d.envs.maniskill_adapter.types import Observation, RobotState, SimGroundTruth
+from pg3d.utils.arrays import to_numpy as _to_numpy
 
 Array = np.ndarray
 
@@ -169,19 +170,6 @@ def _batch_item(value: Any, *, batch_index: int, name: str) -> Array:
             )
         return np.asarray(array[batch_index])
     return array
-
-
-def _to_numpy(value: Any) -> Array:
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "numpy"):
-        try:
-            return np.asarray(value.numpy())
-        except TypeError:
-            pass
-    return np.asarray(value)
 
 
 def _mapping(value: Any, *, name: str) -> Mapping[str, Any]:

@@ -32,4 +32,5 @@ docs-status:
 	@sed -n '1,200p' docs/status.md
 
 clean:
-	rm -rf .pytest_cache .ruff_cache __pycache__ */__pycache__ */*/__pycache__
+	rm -rf .pytest_cache .ruff_cache .mypy_cache
+	find . -type d -name __pycache__ -prune -exec rm -rf {} +

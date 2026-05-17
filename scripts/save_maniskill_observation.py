@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from pg3d.envs.maniskill_adapter import adapt_observation
+from pg3d.utils.arrays import frame_to_numpy
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,10 +115,10 @@ def _save_npz(path: Path, adapted: Any) -> None:
 def _save_video(env: Any, path: Path, *, frames: int) -> None:
     import imageio.v2 as imageio
 
-    images = [_frame_to_numpy(env.render())]
+    images = [frame_to_numpy(env.render())]
     for _ in range(max(frames - 1, 0)):
         env.step(env.action_space.sample())
-        images.append(_frame_to_numpy(env.render()))
+        images.append(frame_to_numpy(env.render()))
     imageio.mimsave(path, images, fps=10)
 
 
@@ -145,19 +146,6 @@ def _save_rerun(path: Path, adapted: Any) -> None:
             "world/target",
             rr.Points3D(adapted.sim_gt.target_position.reshape(1, 3), colors=[0, 255, 0]),
         )
-
-
-def _frame_to_numpy(frame: Any) -> np.ndarray:
-    if hasattr(frame, "detach"):
-        frame = frame.detach()
-    if hasattr(frame, "cpu"):
-        frame = frame.cpu()
-    if hasattr(frame, "numpy"):
-        frame = frame.numpy()
-    array = np.asarray(frame)
-    if array.ndim == 4 and array.shape[0] == 1:
-        array = array[0]
-    return array.astype(np.uint8, copy=False)
 
 
 if __name__ == "__main__":

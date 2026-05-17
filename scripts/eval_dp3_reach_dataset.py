@@ -8,13 +8,14 @@ from typing import Any
 import torch
 
 from pg3d.policies.dp3 import ReachDatasetConfig, ReachSequenceDataset, SimpleDP3
-from pg3d.policies.dp3.normalizer import LinearNormalizer
+from pg3d.policies.dp3.checkpoint import load_reach_policy_from_checkpoint
 from pg3d.policies.dp3.utils import dict_apply
+from pg3d.utils.devices import select_device
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    device = _select_device(args.device)
+    device = select_device(args.device)
     dataset = ReachSequenceDataset(
         ReachDatasetConfig(
             dataset_path=args.dataset,
@@ -34,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         num_workers=0,
     )
     policy = (
-        _load_policy_from_checkpoint(
+        load_reach_policy_from_checkpoint(
             args.checkpoint,
             device=device,
             prefer_ema=args.checkpoint_model == "ema",
@@ -128,34 +129,6 @@ def _build_untrained_policy(
     policy.to(device)
     policy.eval()
     return policy
-
-
-def _load_policy_from_checkpoint(
-    path: Path,
-    *,
-    device: torch.device,
-    prefer_ema: bool,
-) -> SimpleDP3:
-    checkpoint = torch.load(path, map_location=device, weights_only=False)
-    policy = SimpleDP3(**checkpoint["policy_kwargs"])
-    policy.set_normalizer(LinearNormalizer.from_state_dict(checkpoint["normalizer"]))
-    model_state = (
-        checkpoint.get("ema_model")
-        if prefer_ema and checkpoint.get("ema_model") is not None
-        else checkpoint["model"]
-    )
-    policy.load_state_dict(model_state, strict=False)
-    policy.to(device)
-    policy.eval()
-    return policy
-
-
-def _select_device(value: str) -> torch.device:
-    if value == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if value == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("cuda requested but torch.cuda.is_available() is false")
-    return torch.device(value)
 
 
 def _batch_to(batch: Any, device: torch.device) -> Any:

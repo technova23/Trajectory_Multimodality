@@ -9,8 +9,8 @@ Known constraints:
   the lockfile, this runbook, and the simulator ADR/status notes.
 - The default smoke path uses `obs_mode="state"` and does not require rendering.
 - Point-cloud/RGB-D/segmentation paths may require Vulkan and asset setup.
-- The first built-in smoke task is `PickCube-v1`; a narrow pg3d reach task comes after the smoke
-  path is stable.
+- The first built-in smoke task is `PickCube-v1`; custom `PG3DReach-Narrow-v0` and
+  `PG3DReach-Medium-v0` tasks are available for reach dataset smoke/training.
 
 ## Install pg3d with ManiSkill
 
@@ -109,6 +109,7 @@ Generate a 3-demo smoke dataset from the custom reach task:
 ```bash
 uv run python scripts/write_maniskill_reach_dataset.py \
   --num-demos 3 \
+  --hold-steps 8 \
   --output /tmp/pg3d-reach-smoke.zarr \
   --overwrite
 ```
@@ -144,7 +145,8 @@ command writes one `.rrd` per episode with a `step` timeline.
 
 The writer registers `PG3DReach-Narrow-v0` lazily, uses the Panda robot with
 `control_mode="pd_joint_pos"`, saves 7D arm-only DP3 action labels, keeps full simulator actions in
-`/data/sim_action`, and crops point clouds to the default workspace AABB:
+`/data/sim_action`, records one DP3 action chunk of post-success hold-pose rows by default
+(`--hold-steps 8`), and crops point clouds to the default workspace AABB:
 
 ```text
 x: [-0.9, 0.7], y: [-0.6, 0.6], z: [0.0, 1.1]

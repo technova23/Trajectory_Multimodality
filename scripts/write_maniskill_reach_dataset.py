@@ -17,6 +17,19 @@ from pg3d.envs.maniskill_adapter.dataset import (
     observation_to_dataset_row,
     write_reach_zarr,
 )
+from pg3d.utils.arrays import (
+    bool_any as _bool_any,
+)
+from pg3d.utils.arrays import (
+    bool_info as _bool_info,
+)
+from pg3d.utils.arrays import (
+    float_info as _float_info,
+)
+from pg3d.utils.arrays import (
+    to_numpy as _to_numpy,
+)
+from pg3d.utils.serialization import jsonable as _jsonable
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -427,46 +440,10 @@ def _tcp_to_goal_distance(unwrapped_env: Any) -> float:
     return float(np.linalg.norm(goal_pos - tcp_pos))
 
 
-def _bool_info(info: dict[str, Any], key: str) -> bool:
-    return bool(np.asarray(_to_numpy(info[key])).reshape(-1)[0]) if key in info else False
-
-
-def _float_info(info: dict[str, Any], key: str, *, default: float) -> float:
-    if key not in info:
-        return float(default)
-    return float(np.asarray(_to_numpy(info[key])).reshape(-1)[0])
-
-
-def _bool_any(value: Any) -> bool:
-    return bool(np.any(_to_numpy(value)))
-
-
-def _to_numpy(value: Any) -> np.ndarray:
-    if hasattr(value, "detach"):
-        value = value.detach()
-    if hasattr(value, "cpu"):
-        value = value.cpu()
-    if hasattr(value, "numpy"):
-        value = value.numpy()
-    return np.asarray(value)
-
-
 def _action_mode(value: str) -> ActionMode:
     if value not in {"abs_joint", "delta_joint"}:
         raise ValueError(f"unsupported action mode {value!r}")
     return value  # type: ignore[return-value]
-
-
-def _jsonable(value: Any) -> Any:
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, dict):
-        return {str(key): _jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(item) for item in value]
-    return value
 
 
 if __name__ == "__main__":
