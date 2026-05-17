@@ -23,13 +23,18 @@ imports stay simulator-free. A small non-rendering ManiSkill smoke script valida
 state and point-cloud observations, including segmentation-derived robot/object masks when a live
 ManiSkill env context is available. P05 adds custom `PG3DReach-Narrow-v0` /
 `PG3DReach-Medium-v0` tasks plus a smoke-scale Zarr dataset writer for DP3-compatible reach data.
+P06 adds a simulation-free reach Zarr sequence loader for pg3d-native DP3, plus CPU smoke
+training/eval scripts with optional W&B metrics and histogram logging. P06 now also has a
+closed-loop policy rollout script that loads a trained reach checkpoint, runs it in live
+`PG3DReach-*` ManiSkill environments, and writes MP4 videos, Rerun timelines, and JSON metrics for
+dataset-seed or fresh-seed rollouts.
 
 ## Immediate next steps
 
-1. Inspect generated `PG3DReach-Narrow-v0` smoke datasets with MP4/Rerun replay artifacts and
-   verify point-cloud crop/mask quality.
-2. Run P06: load the ManiSkill reach Zarr dataset into pg3d-native DP3 and start a smoke training
-   step.
+1. Generate a larger nominal `PG3DReach-Narrow-v0` dataset and overfit a DP3 checkpoint on the
+   workstation.
+2. Inspect W&B/offline training metrics plus dataset-seed and fresh-seed policy rollout videos
+   before moving to P07.
 3. Use the saved reach trajectories to sanity-check future FK/world-model rollouts.
 
 ## Active risks
@@ -66,6 +71,10 @@ ManiSkill env context is available. P05 adds custom `PG3DReach-Narrow-v0` /
 - Reach dataset DP3 action labels are 7D Panda arm joint targets/deltas; full simulator actions are
   stored separately for replay.
 - Reach dataset replay can now save MP4 videos and per-episode Rerun timeline artifacts.
+- DP3 reach training consumes only point cloud, agent position, and action arrays; simulator
+  ground-truth/debug arrays stay out of policy batches.
+- DP3 policy rollout visualization is local-only for now: MP4, Rerun `.rrd`, `metrics.jsonl`, and
+  `summary.json`, without W&B media upload.
 
 ## Latest work log
 
@@ -80,5 +89,6 @@ See `docs/worklog/`.
   `uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks`.
 - Current validation: `uv lock --check`, `make smoke`, `make test`, `make lint`,
   `make gpu-check`, `make maniskill-check`, and the state/point-cloud/MP4/Rerun observation
-  artifact scripts pass on the RTX 5090 workstation environment. P05 reach dataset smoke and replay
-  visualization validation is recorded in the worklog.
+  artifact scripts pass on the RTX 5090 workstation environment. P05 reach dataset smoke/replay
+  visualization plus P06 DP3 reach training/eval/rollout smoke validation are recorded in the
+  worklog.

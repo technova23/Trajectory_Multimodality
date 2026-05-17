@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 import torch
@@ -68,6 +69,59 @@ class LinearNormalizer(nn.Module):
     def identity_for_keys(cls, keys: list[str]) -> LinearNormalizer:
         """Create identity normalizers for each named tensor field."""
         return cls({key: SingleFieldLinearNormalizer.identity() for key in keys})
+
+    @classmethod
+    def standardize_from_data(
+        cls,
+        data: Mapping[str, np.ndarray | torch.Tensor],
+        *,
+        eps: float = 1e-6,
+    ) -> LinearNormalizer:
+        """Fit per-feature standardization statistics from arrays.
+
+        Each array is flattened over leading dimensions and fit over the final
+        feature dimension, matching DP3 tensors such as ``[T, N, 3]`` point
+        clouds or ``[T, 7]`` action labels.
+        """
+        fields: dict[str, SingleFieldLinearNormalizer] = {}
+        for key, value in data.items():
+            tensor = _as_tensor(value).float()
+            if tensor.ndim == 0:
+                raise ValueError(f"cannot fit normalizer for scalar field {key!r}")
+            flattened = tensor.reshape(-1, tensor.shape[-1])
+            mean = flattened.mean(dim=0)
+            std = flattened.std(dim=0, unbiased=False).clamp_min(eps)
+            fields[key] = SingleFieldLinearNormalizer.create_manual(
+                scale=1.0 / std,
+                offset=-mean / std,
+            )
+        return cls(fields)
+
+    @classmethod
+    def from_state_dict(cls, state_dict: Mapping[str, Any]) -> LinearNormalizer:
+        """Rebuild a normalizer from a ``LinearNormalizer.state_dict()`` mapping."""
+        grouped: dict[str, dict[str, torch.Tensor]] = {}
+        for key, value in state_dict.items():
+            parts = key.split(".")
+            if len(parts) != 3 or parts[0] != "fields" or parts[2] not in {"scale", "offset"}:
+                continue
+            grouped.setdefault(parts[1], {})[parts[2]] = _as_tensor(value).float()
+        missing = {
+            field
+            for field, values in grouped.items()
+            if "scale" not in values or "offset" not in values
+        }
+        if missing:
+            raise ValueError(f"incomplete normalizer fields: {sorted(missing)}")
+        return cls(
+            {
+                field: SingleFieldLinearNormalizer.create_manual(
+                    scale=values["scale"],
+                    offset=values["offset"],
+                )
+                for field, values in grouped.items()
+            }
+        )
 
     def __getitem__(self, key: str) -> SingleFieldLinearNormalizer:
         """Return a field normalizer, lazily creating an identity normalizer."""

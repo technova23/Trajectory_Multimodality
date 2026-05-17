@@ -137,7 +137,7 @@ class SimpleDP3(BasePolicy):
 
     def set_normalizer(self, normalizer: LinearNormalizer) -> None:
         """Replace fitted normalization statistics without rebuilding the policy."""
-        self.normalizer.load_state_dict(normalizer.state_dict())
+        self.normalizer = copy.deepcopy(normalizer)
 
     def conditional_sample(
         self,

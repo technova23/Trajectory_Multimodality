@@ -145,6 +145,76 @@ Use the `step` timeline in the Rerun viewer and press play.
 The dataset writer uses `PG3DReach-Narrow-v0`, `obs_mode="pointcloud"`, `pd_joint_pos`,
 Panda arm-only 7D DP3 action labels, and a fixed-size cropped point cloud by default.
 
+## DP3 reach training smoke
+
+Run a short dataset-loading and training smoke:
+
+```bash
+uv run python scripts/train_dp3_reach.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --device cpu \
+  --max-steps 1 \
+  --batch-size 2 \
+  --checkpoint-out artifacts/reach-dataset-smoke/dp3-reach-smoke.pt
+```
+
+Run dataset-only inference/eval against that checkpoint:
+
+```bash
+uv run python scripts/eval_dp3_reach_dataset.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --device cpu \
+  --max-batches 1 \
+  --batch-size 2
+```
+
+Enable W&B metric and histogram logging when the local W&B service can start:
+
+```bash
+uv run python scripts/train_dp3_reach.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --device cpu \
+  --max-steps 1 \
+  --wandb-mode offline \
+  --log-histograms
+```
+
+In restricted sandboxes, W&B may fail to create its local cache/socket. The trainer logs a warning
+and continues unless `--wandb-required` is set.
+
+Run closed-loop policy rollouts in ManiSkill and save MP4/Rerun artifacts:
+
+```bash
+uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks
+```
+
+```bash
+uv run python scripts/rollout_dp3_reach_policy.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --source dataset \
+  --episodes 3 \
+  --device cuda \
+  --output-dir artifacts/reach-dataset-smoke/policy-rollouts-dataset
+```
+
+Evaluate fresh seeds from the same reach distribution:
+
+```bash
+uv run python scripts/rollout_dp3_reach_policy.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --source fresh \
+  --episodes 3 \
+  --seed-start 10000 \
+  --device cuda \
+  --output-dir artifacts/reach-dataset-smoke/policy-rollouts-fresh
+```
+
+The rollout script re-observes after each configurable `--replan-stride` chunk, stops early on
+success, and always logs the goal marker in the Rerun timeline.
+
 ## W&B
 
 ```bash

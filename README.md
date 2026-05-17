@@ -119,6 +119,61 @@ Use the `step` timeline in the Rerun viewer and press play. The dataset writer
 stores 7D Panda arm labels for DP3 and keeps full simulator actions separately
 for replay.
 
+## DP3 Training Smoke
+
+Run a one-step behavior-cloning smoke on the reach dataset:
+
+```bash
+uv run python scripts/train_dp3_reach.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --device cpu \
+  --max-steps 1 \
+  --batch-size 2 \
+  --checkpoint-out artifacts/reach-dataset-smoke/dp3-reach-smoke.pt
+```
+
+Check dataset-only inference against the checkpoint:
+
+```bash
+uv run python scripts/eval_dp3_reach_dataset.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --device cpu \
+  --max-batches 1
+```
+
+## DP3 Policy Rollout Smoke
+
+Roll out a trained reach checkpoint in a live ManiSkill environment and save
+local MP4, Rerun, and JSON artifacts:
+
+```bash
+uv run python scripts/rollout_dp3_reach_policy.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --source dataset \
+  --episodes 3 \
+  --device cuda \
+  --output-dir artifacts/reach-dataset-smoke/policy-rollouts-dataset
+```
+
+For fresh seeds from the same reach distribution:
+
+```bash
+uv run python scripts/rollout_dp3_reach_policy.py \
+  --dataset artifacts/reach-dataset-smoke/pg3d-reach-smoke.zarr \
+  --checkpoint artifacts/reach-dataset-smoke/dp3-reach-smoke.pt \
+  --source fresh \
+  --episodes 3 \
+  --seed-start 10000 \
+  --device cuda \
+  --output-dir artifacts/reach-dataset-smoke/policy-rollouts-fresh
+```
+
+The rollout script loads env configuration from the dataset metadata, uses
+closed-loop action chunks, stops early on success, and writes `summary.json`,
+`metrics.jsonl`, `episode_*.mp4`, and `episode_*.rrd`.
+
 ## Docs
 
 - `AGENTS.md`: durable agent instructions.

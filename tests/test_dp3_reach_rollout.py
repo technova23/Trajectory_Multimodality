@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import subprocess
+import sys
+
+import numpy as np
+
+from scripts.rollout_dp3_reach_policy import (
+    append_obs_window,
+    make_initial_obs_window,
+    policy_action_to_sim_action,
+    select_rollout_specs,
+)
+
+
+def test_policy_action_to_sim_action_supports_abs_and_delta() -> None:
+    action = np.asarray([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7], dtype=np.float32)
+    state = np.asarray([1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 0.04, 0.04], dtype=np.float32)
+
+    abs_action = policy_action_to_sim_action(
+        action,
+        state,
+        action_mode="abs_joint",
+        sim_action_dim=8,
+        low=np.full((8,), -10.0, dtype=np.float32),
+        high=np.full((8,), 10.0, dtype=np.float32),
+        gripper_open=0.04,
+    )
+    delta_action = policy_action_to_sim_action(
+        action,
+        state,
+        action_mode="delta_joint",
+        sim_action_dim=8,
+        low=np.full((8,), -10.0, dtype=np.float32),
+        high=np.full((8,), 10.0, dtype=np.float32),
+        gripper_open=0.04,
+    )
+
+    np.testing.assert_allclose(abs_action[:7], action)
+    assert abs_action[-1] == np.float32(0.04)
+    np.testing.assert_allclose(delta_action[:7], state[:7] + action)
+    assert delta_action[-1] == np.float32(0.04)
+
+    np.testing.assert_allclose(
+        policy_action_to_sim_action(
+            action,
+            state,
+            action_mode="abs_joint",
+            sim_action_dim=7,
+            low=np.full((7,), -10.0, dtype=np.float32),
+            high=np.full((7,), 10.0, dtype=np.float32),
+        ),
+        action,
+    )
+
+
+def test_policy_action_to_sim_action_clips_bounds() -> None:
+    sim_action = policy_action_to_sim_action(
+        np.asarray([2.0] * 7, dtype=np.float32),
+        np.zeros((9,), dtype=np.float32),
+        action_mode="abs_joint",
+        sim_action_dim=8,
+        low=np.full((8,), -1.0, dtype=np.float32),
+        high=np.full((8,), 1.0, dtype=np.float32),
+        gripper_open=0.04,
+    )
+
+    np.testing.assert_allclose(sim_action, np.asarray([1.0] * 7 + [0.04], dtype=np.float32))
+
+
+def test_observation_window_pads_and_rolls_without_aliasing() -> None:
+    first = _entry(1.0)
+    window = make_initial_obs_window(first, n_obs_steps=2)
+    first["agent_pos"][0] = 99.0
+
+    assert len(window) == 2
+    assert window[0]["agent_pos"][0] == 1.0
+    assert window[1]["agent_pos"][0] == 1.0
+
+    window = append_obs_window(window, _entry(2.0), n_obs_steps=2)
+
+    assert len(window) == 2
+    assert window[0]["agent_pos"][0] == 1.0
+    assert window[1]["agent_pos"][0] == 2.0
+
+
+def test_select_rollout_specs_dataset_and_fresh_seed_skipping() -> None:
+    dataset_specs = select_rollout_specs(
+        source="dataset",
+        dataset_episode_seeds=[5, 6, 7],
+        episodes=2,
+        episode_indices=None,
+    )
+    indexed_specs = select_rollout_specs(
+        source="dataset",
+        dataset_episode_seeds=[5, 6, 7],
+        episodes=2,
+        episode_indices=[2, 0],
+    )
+    fresh_specs = select_rollout_specs(
+        source="fresh",
+        dataset_episode_seeds=[10000, 10001],
+        episodes=3,
+        seed_start=10000,
+    )
+
+    assert [spec.seed for spec in dataset_specs] == [5, 6]
+    assert [spec.dataset_episode_index for spec in indexed_specs] == [2, 0]
+    assert [spec.seed for spec in indexed_specs] == [7, 5]
+    assert [spec.seed for spec in fresh_specs] == [10002, 10003, 10004]
+
+
+def test_rollout_script_import_keeps_simulator_lazy() -> None:
+    code = """
+import importlib
+import sys
+
+importlib.import_module("scripts.rollout_dp3_reach_policy")
+assert "mani_skill" not in sys.modules
+assert "sapien" not in sys.modules
+assert "gymnasium" not in sys.modules
+assert "rerun" not in sys.modules
+"""
+    subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def _entry(value: float) -> dict[str, np.ndarray | bool | float]:
+    return {
+        "point_cloud": np.full((4, 3), value, dtype=np.float32),
+        "robot_mask": np.zeros((4,), dtype=bool),
+        "point_valid_mask": np.ones((4,), dtype=bool),
+        "agent_pos": np.full((9,), value, dtype=np.float32),
+        "target_position": np.full((3,), value, dtype=np.float32),
+        "tcp_pose": np.full((7,), value, dtype=np.float32),
+        "success": False,
+        "final_distance": value,
+    }

@@ -33,7 +33,7 @@ reach MVP:
 - 1D diffusion action model,
 - normalizer, mask generator, EMA/checkpoint utilities as needed,
 - synthetic import/inference/loss smoke tests,
-- future generic zarr dataset and trainer scripts.
+- ManiSkill reach Zarr sequence loader and smoke trainer/eval scripts.
 
 It intentionally excludes upstream DP3 benchmark/simulation dependencies such as MuJoCo, Gym,
 MetaWorld, DexArt, RRL, PyTorch3D, and task-generation scripts.
@@ -91,6 +91,20 @@ P05 reach dataset conventions:
   `/data/target_position`, `/data/tcp_pose`, `/data/success`, and `/meta/episode_ends`.
 - Point clouds are cropped to a workspace AABB before deterministic downsample/pad so far
   outliers from ManiSkill point-cloud rendering do not dominate the DP3 input.
+
+P06 DP3 reach training conventions:
+
+- `ReachSequenceDataset` samples fixed-horizon windows from the P05 Zarr schema and exposes only
+  policy-visible fields: `obs.point_cloud`, `obs.agent_pos`, and `action`.
+- Simulator/eval arrays such as target position, TCP pose, success, robot masks, and simulator
+  actions remain out of policy batches.
+- Normalizers are fit per final feature dimension for `point_cloud`, `agent_pos`, and `action`.
+- `scripts/train_dp3_reach.py` is a smoke-scale behavior-cloning loop; W&B is optional and
+  failures to initialize W&B do not block local smoke training unless explicitly requested.
+- `scripts/rollout_dp3_reach_policy.py` is the first closed-loop policy rollout path. It loads
+  env/crop/action metadata from the Zarr dataset, keeps a rolling `n_obs_steps` observation window,
+  converts 7D DP3 arm labels back into full Panda simulator actions, and saves local MP4/Rerun/JSON
+  artifacts for dataset-seed or fresh-seed rollouts.
 
 ### ActionChunk
 
