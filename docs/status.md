@@ -19,15 +19,15 @@ Simulator migration to ManiSkill/SAPIEN is complete in the active code path. The
 pg3d-native simulation-free DP3 slice under `pg3d/policies/dp3` with synthetic import, inference,
 and training-step smoke tests. ManiSkill is tracked as a pinned optional uv extra, while base `pg3d`
 imports stay simulator-free. A small non-rendering ManiSkill smoke script validates a built-in
-`PickCube-v1` environment before the custom reach adapter is implemented.
+`PickCube-v1` environment. The first observation adapter now targets Franka/Panda `PickCube-v1`
+state and point-cloud observations, including segmentation-derived robot/object masks when a live
+ManiSkill env context is available.
 
 ## Immediate next steps
 
-1. Run `uv sync --extra cu129 --extra maniskill --group dev --group notebooks`.
-2. Run `uv run python scripts/check_maniskill.py` on the workstation.
-3. Implement the P04 ManiSkill observation adapter for state and point-cloud observations.
-4. Extend the ManiSkill adapter into the P05 reach/custom-task dataset writer.
-5. Extend the pg3d-native DP3 slice from synthetic smoke tests to a generic zarr dataset and
+1. Run P05: extend the ManiSkill adapter into the reach/custom-task dataset writer.
+2. Use the saved P04 point-cloud artifacts to sanity-check robot/cube masks before world-model work.
+3. Extend the pg3d-native DP3 slice from synthetic smoke tests to a generic zarr dataset and
    one-step trainer smoke.
 
 ## Active risks
@@ -37,6 +37,7 @@ imports stay simulator-free. A small non-rendering ManiSkill smoke script valida
 - ManiSkill v3 is a fast-moving stack; keep the adapter isolated and commands pinned in runbooks.
 - Rendering and point-cloud observation modes may require Vulkan/driver setup beyond the
   non-rendering `obs_mode="state"` smoke.
+- Optional Rerun visualization is pinned to `rerun-sdk==0.22.1` while pg3d remains on NumPy 1.x.
 - Reach is useful for mechanism validation, but code-only planners may be strong; avoid over-claiming from reach-only results.
 - The kinematic point-cloud world model is the novel project pivot and should be validated visually early.
 - New clones and fresh virtualenvs must sync the `maniskill` optional extra before running
@@ -59,6 +60,7 @@ imports stay simulator-free. A small non-rendering ManiSkill smoke script valida
 - ManiSkill observations use typed pg3d dataclasses and keep policy-visible point clouds/agent state
   separate from simulator ground truth and eval/debug masks.
 - Robot masks are first-class observation metadata for the world model.
+- Franka/Panda is the first robot target for built-in ManiSkill smoke and observation adaptation.
 
 ## Latest work log
 
@@ -69,5 +71,8 @@ See `docs/worklog/`.
   `docs/adr/0008-observation-schema-and-masks.md`.
 - Current canonical setup command:
   `uv sync --extra cu129 --extra maniskill --group dev --group notebooks`.
+- Optional visualization setup command:
+  `uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks`.
 - Current validation: `uv lock --check`, `make smoke`, `make test`, `make lint`,
-  `make gpu-check`, and `make maniskill-check` pass on the RTX 5090 workstation environment.
+  `make gpu-check`, `make maniskill-check`, and the state/point-cloud/MP4/Rerun observation
+  artifact scripts pass on the RTX 5090 workstation environment.

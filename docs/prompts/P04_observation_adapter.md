@@ -31,5 +31,5 @@ Tasks:
 
 Done when:
 - One ManiSkill observation can be adapted or the exact missing simulator/rendering blocker is documented.
-- Optional visualization is separate from the default non-rendering smoke.
+- Optional visualization is separate from the default non-rendering smoke. Visualization creates mp4 videos, and can optionally also create rerun-style 3D visualizations (decide if rerun is worth adding as an optional dependency).
 - Data shape conventions are documented.

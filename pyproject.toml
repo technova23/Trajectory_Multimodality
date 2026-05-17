@@ -49,6 +49,11 @@ maniskill = [
   "mani_skill==3.0.1",
 ]
 
+# Optional visualization tooling for point-cloud artifact inspection.
+viz = [
+  "rerun-sdk==0.22.1",
+]
+
 [dependency-groups]
 dev = [
   "pytest>=8.2",

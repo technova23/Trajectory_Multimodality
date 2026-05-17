@@ -72,6 +72,15 @@ Current shape conventions:
 - `SimGroundTruth.target_position`: optional `float32 [3]` from ManiSkill task state/info
   state; eval/debug only.
 
+P04 ManiSkill adapter conventions:
+
+- Default conversion uses `obs_mode="state_dict"` so the adapter can read structured
+  `agent.qpos`, `agent.qvel`, `extra.tcp_pose`, and `extra.goal_pos`.
+- `obs_mode="pointcloud"` reads `pointcloud.xyzw[..., :3]` as world XYZ, `pointcloud.rgb` as
+  optional RGB, and `pointcloud.segmentation` as raw simulator ids.
+- Panda robot masks are derived from link `per_scene_id` values when the live ManiSkill env is
+  passed as adapter context; raw observations alone are not enough to map ids to robot/object names.
+
 ### ActionChunk
 
 ```python

@@ -2,12 +2,14 @@
 
 This package is the simulator-specific home for ManiSkill/SAPIEN integration.
 
-Current migration scope is intentionally small:
+Current scope is intentionally small:
 
 - keep `pg3d` imports free of ManiSkill, SAPIEN, rendering, Vulkan, and GPU requirements;
 - keep typed observation boundary objects available for downstream dataset, policy, and world-model work;
 - validate the optional simulator dependency through `scripts/check_maniskill.py`;
-- defer a full ManiSkill observation/action adapter until the P04/P05 milestones.
+- adapt `state_dict` and optional `pointcloud` observations for built-in Franka/Panda
+  `PickCube-v1` smoke;
+- defer custom reach, dataset writing, and action adapters until later milestones.
 
 The first task path is:
 

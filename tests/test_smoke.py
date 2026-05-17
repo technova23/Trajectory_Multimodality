@@ -39,5 +39,6 @@ importlib.import_module("pg3d.envs.maniskill_adapter")
 assert "mani_skill" not in sys.modules
 assert "sapien" not in sys.modules
 assert "gymnasium" not in sys.modules
+assert "rerun" not in sys.modules
 """
     subprocess.run([sys.executable, "-c", code], check=True)

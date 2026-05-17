@@ -88,6 +88,23 @@ make maniskill-check
 
 The default smoke uses `PickCube-v1` with `obs_mode="state"` and no rendering.
 
+## ManiSkill observation artifact
+
+```bash
+uv run python scripts/save_maniskill_observation.py --obs-mode state_dict \
+  --output-dir artifacts/maniskill_state_observation
+uv run python scripts/save_maniskill_observation.py --obs-mode pointcloud \
+  --output-dir artifacts/maniskill_pointcloud_observation
+```
+
+For optional Rerun export, first sync the `viz` extra:
+
+```bash
+uv sync --extra cu129 --extra maniskill --extra viz --group dev --group notebooks
+```
+
+The optional `viz` extra uses `rerun-sdk==0.22.1` while pg3d remains on NumPy 1.x.
+
 ## W&B
 
 ```bash
