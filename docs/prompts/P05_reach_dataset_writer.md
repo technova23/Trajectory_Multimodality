@@ -18,6 +18,7 @@ Constraints:
 - Do not run large generation jobs. It's the user that'll run such jobs.
 - Support absolute joint target chunks first and delta joint chunks as fallback.
 - Save enough metadata for replay: seed, task variant, action mode, camera config, submodule commit hashes.
+- We should clip the pointcloud so we only capture a small area around the robot workspace. The default pointcloud capture in maniskill has several far-off, outlier points.
 
 Tasks:
 1. Inspect DP3 dataset expectations in the fork/submodule.
