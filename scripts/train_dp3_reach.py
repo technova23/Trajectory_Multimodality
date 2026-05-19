@@ -18,6 +18,10 @@ from pg3d.policies.dp3.checkpoint import (
     save_reach_policy_checkpoint,
     should_save_checkpoint,
 )
+from pg3d.policies.dp3.goal_markers import (
+    DEFAULT_GOAL_MARKER_POINTS,
+    DEFAULT_GOAL_MARKER_RADIUS,
+)
 from pg3d.policies.dp3.modules import EMAModel
 from pg3d.policies.dp3.reach_dataset import reach_shape_meta
 from pg3d.policies.dp3.utils import dict_apply
@@ -38,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
             val_ratio=args.val_ratio,
             seed=args.seed,
             max_train_episodes=args.max_train_episodes,
+            goal_marker_points=args.goal_marker_points,
+            goal_marker_radius=args.goal_marker_radius,
         ),
         split="train",
     )
@@ -266,6 +272,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--val-every", type=int, default=500)
     parser.add_argument("--max-val-batches", type=int, default=4)
     parser.add_argument("--max-train-episodes", type=int, default=None)
+    parser.add_argument("--goal-marker-points", type=int, default=DEFAULT_GOAL_MARKER_POINTS)
+    parser.add_argument("--goal-marker-radius", type=float, default=DEFAULT_GOAL_MARKER_RADIUS)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--adam-beta1", type=float, default=0.95)
     parser.add_argument("--adam-beta2", type=float, default=0.999)
@@ -321,6 +329,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         raise ValueError("--val-every must be positive")
     if args.max_val_batches <= 0:
         raise ValueError("--max-val-batches must be positive")
+    if args.goal_marker_points < 0:
+        raise ValueError("--goal-marker-points must be non-negative")
+    if args.goal_marker_radius < 0:
+        raise ValueError("--goal-marker-radius must be non-negative")
     if args.loss_window <= 0:
         raise ValueError("--loss-window must be positive")
     if args.histogram_every <= 0:
@@ -361,6 +373,8 @@ def _policy_kwargs(
         "down_dims": tuple(args.down_dims),
         "kernel_size": args.kernel_size,
         "n_groups": args.n_groups,
+        "goal_marker_points": args.goal_marker_points,
+        "goal_marker_radius": args.goal_marker_radius,
         "pointcloud_encoder_cfg": {
             "out_channels": args.encoder_output_dim,
             "use_layernorm": True,

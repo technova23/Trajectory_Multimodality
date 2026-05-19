@@ -84,10 +84,14 @@ P04 ManiSkill adapter conventions:
 P05 reach dataset conventions:
 
 - Custom ManiSkill reach tasks register lazily as `PG3DReach-Narrow-v0`,
-  `PG3DReach-Medium-v0`, and `PG3DReach-Workspace-v0`.
+  `PG3DReach-Medium-v0`, `PG3DReach-Workspace-v0`, and
+  `PG3DReach-BalancedWorkspace-v0`.
 - `PG3DReach-Workspace-v0` samples goals uniformly in a broad Cartesian cuboid with center
   `(0.05, 0.0, 0.45)` and half extents `(0.35, 0.35, 0.30)` for pre-constraints reach policy
   diversity.
+- `PG3DReach-BalancedWorkspace-v0` is the P11 reliability distribution: 70% core-practical goals
+  in `x[-0.14, 0.24]`, `y[-0.20, 0.20]`, `z[0.28, 0.56]`, and 30% bounded-practical goals in
+  `x[-0.26, 0.34]`, `y[-0.30, 0.30]`, `z[0.20, 0.68]`.
 - DP3 policy arrays use `/data/point_cloud` as `float32 [T, 512, 3]`, `/data/state` as
   Panda qpos `float32 [T, 9]`, and `/data/action` as arm-only `float32 [T, 7]`.
 - Replay/debug arrays keep `/data/sim_action`, `/data/robot_mask`, `/data/point_valid_mask`,
@@ -103,6 +107,13 @@ P06 DP3 reach training conventions:
   policy-visible fields: `obs.point_cloud`, `obs.agent_pos`, and `action`.
 - Simulator/eval arrays such as target position, TCP pose, success, robot masks, and simulator
   actions remain out of policy batches.
+- P11 ordered goal tokens are injected into `obs.point_cloud` from `/data/target_position` at
+  dataset-load and live policy-input time. By default, the final 16 XYZ points are overwritten with
+  a deterministic target-centered marker at radius 1.5 cm; `target_position` itself remains
+  eval/debug metadata, not a separate policy key.
+- `DP3Encoder` keeps the usual PointNet scene branch for the first `N-K` points and adds a small
+  ordered marker MLP over the final K points. Set `goal_marker_points=0` for old checkpoint
+  compatibility and ablations.
 - Normalizers are fit per final feature dimension for `point_cloud`, `agent_pos`, and `action`.
 - `scripts/train_dp3_reach.py` is a behavior-cloning loop with `pad_after=n_action_steps-1`,
   validation splits, cosine LR warmup, gradient clipping, EMA checkpoints, and optional W&B

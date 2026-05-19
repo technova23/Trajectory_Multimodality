@@ -8,6 +8,11 @@ import torch
 
 from pg3d.envs.maniskill_adapter.dataset import ReachEpisodeData, write_reach_zarr
 from pg3d.policies.dp3 import SimpleDP3
+from pg3d.policies.dp3.goal_markers import (
+    DEFAULT_GOAL_MARKER_RADIUS,
+    goal_marker_offsets,
+    insert_goal_marker_points,
+)
 from pg3d.policies.dp3.reach_dataset import (
     ReachDatasetConfig,
     ReachSequenceDataset,
@@ -20,7 +25,12 @@ from pg3d.policies.dp3.reach_dataset import (
 def test_reach_sequence_dataset_returns_policy_visible_batch(tmp_path) -> None:
     dataset_path = _write_reach_dataset(tmp_path, num_episodes=2, episode_length=4)
     dataset = ReachSequenceDataset(
-        ReachDatasetConfig(dataset_path=dataset_path, horizon=4, n_obs_steps=2),
+        ReachDatasetConfig(
+            dataset_path=dataset_path,
+            horizon=4,
+            n_obs_steps=2,
+            goal_marker_points=0,
+        ),
         split="train",
     )
 
@@ -35,6 +45,51 @@ def test_reach_sequence_dataset_returns_policy_visible_batch(tmp_path) -> None:
     assert dataset.shape_meta == reach_shape_meta(num_points=4, state_dim=9, action_dim=7)
 
 
+def test_goal_marker_insertion_uses_ordered_tail_points(tmp_path) -> None:
+    dataset_path = _write_reach_dataset(tmp_path, num_episodes=2, episode_length=4)
+    dataset = ReachSequenceDataset(
+        ReachDatasetConfig(
+            dataset_path=dataset_path,
+            horizon=4,
+            n_obs_steps=2,
+            goal_marker_points=2,
+            goal_marker_radius=DEFAULT_GOAL_MARKER_RADIUS,
+        ),
+        split="train",
+    )
+    raw_dataset = ReachSequenceDataset(
+        ReachDatasetConfig(
+            dataset_path=dataset_path,
+            horizon=4,
+            n_obs_steps=2,
+            goal_marker_points=0,
+        ),
+        split="train",
+    )
+
+    sample = dataset[0]
+    raw_sample = raw_dataset[0]
+    point_cloud = sample["obs"]["point_cloud"].numpy()
+
+    assert set(sample["obs"]) == {"point_cloud", "agent_pos"}
+    np.testing.assert_allclose(point_cloud[..., -2:, :], 0.0)
+    np.testing.assert_allclose(
+        point_cloud[..., :-2, :],
+        raw_sample["obs"]["point_cloud"][..., :-2, :],
+    )
+
+
+def test_goal_marker_helper_supports_fixed_16_point_layout() -> None:
+    point_cloud = np.zeros((1, 20, 3), dtype=np.float32)
+    target = np.asarray([[0.2, -0.1, 0.3]], dtype=np.float32)
+
+    transformed = insert_goal_marker_points(point_cloud, target, num_points=16, radius=0.015)
+    expected = target[:, None, :] + goal_marker_offsets(num_points=16, radius=0.015)
+
+    np.testing.assert_allclose(transformed[:, -16:, :], expected)
+    np.testing.assert_allclose(transformed[:, :4, :], 0.0)
+
+
 def test_reach_dataset_validation_split_is_deterministic(tmp_path) -> None:
     dataset_path = _write_reach_dataset(tmp_path, num_episodes=3, episode_length=4)
     config = ReachDatasetConfig(
@@ -43,6 +98,7 @@ def test_reach_dataset_validation_split_is_deterministic(tmp_path) -> None:
         n_obs_steps=2,
         val_ratio=0.34,
         seed=7,
+        goal_marker_points=0,
     )
 
     train = ReachSequenceDataset(config, split="train")
@@ -80,7 +136,12 @@ def test_sequence_indices_pad_episode_end_for_terminal_chunks() -> None:
 def test_reach_dataset_normalizer_supports_dp3_loss(tmp_path) -> None:
     dataset_path = _write_reach_dataset(tmp_path, num_episodes=2, episode_length=4)
     dataset = ReachSequenceDataset(
-        ReachDatasetConfig(dataset_path=dataset_path, horizon=4, n_obs_steps=2),
+        ReachDatasetConfig(
+            dataset_path=dataset_path,
+            horizon=4,
+            n_obs_steps=2,
+            goal_marker_points=2,
+        ),
         split="train",
     )
     loader = torch.utils.data.DataLoader(dataset, batch_size=2)
@@ -90,6 +151,8 @@ def test_reach_dataset_normalizer_supports_dp3_loss(tmp_path) -> None:
         horizon=4,
         n_obs_steps=2,
         n_action_steps=1,
+        goal_marker_points=2,
+        goal_marker_radius=DEFAULT_GOAL_MARKER_RADIUS,
         num_inference_steps=2,
         encoder_output_dim=16,
         diffusion_step_embed_dim=32,

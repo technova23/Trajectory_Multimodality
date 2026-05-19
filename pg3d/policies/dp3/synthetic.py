@@ -30,6 +30,7 @@ def make_tiny_policy(
     state_dim: int = 7,
     action_dim: int = 7,
     num_inference_steps: int = 2,
+    goal_marker_points: int = 0,
 ) -> SimpleDP3:
     """Build a small DP3 instance suitable for CPU/GPU smoke tests."""
     return SimpleDP3(
@@ -47,6 +48,7 @@ def make_tiny_policy(
         down_dims=(32, 64),
         kernel_size=3,
         n_groups=8,
+        goal_marker_points=goal_marker_points,
         pointcloud_encoder_cfg={
             "out_channels": 16,
             "use_layernorm": True,

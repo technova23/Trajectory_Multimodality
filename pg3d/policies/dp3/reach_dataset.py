@@ -10,6 +10,11 @@ import numpy as np
 import torch
 import zarr
 
+from pg3d.policies.dp3.goal_markers import (
+    DEFAULT_GOAL_MARKER_POINTS,
+    DEFAULT_GOAL_MARKER_RADIUS,
+    insert_goal_marker_points,
+)
 from pg3d.policies.dp3.normalizer import LinearNormalizer
 from pg3d.policies.dp3.policy import DP3Batch
 
@@ -28,6 +33,8 @@ class ReachDatasetConfig:
     val_ratio: float = 0.0
     seed: int = 42
     max_train_episodes: int | None = None
+    goal_marker_points: int = DEFAULT_GOAL_MARKER_POINTS
+    goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS
 
     def __post_init__(self) -> None:
         if self.horizon <= 0:
@@ -40,6 +47,10 @@ class ReachDatasetConfig:
             raise ValueError("val_ratio must be in [0, 1)")
         if self.max_train_episodes is not None and self.max_train_episodes <= 0:
             raise ValueError("max_train_episodes must be positive")
+        if self.goal_marker_points < 0:
+            raise ValueError("goal_marker_points must be non-negative")
+        if self.goal_marker_radius < 0:
+            raise ValueError("goal_marker_radius must be non-negative")
         object.__setattr__(self, "dataset_path", Path(self.dataset_path))
 
     @property
@@ -108,9 +119,17 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
     def get_normalizer(self) -> LinearNormalizer:
         """Fit policy-field normalizers from the full dataset arrays."""
         data = self.root["data"]
+        point_cloud = np.asarray(data["point_cloud"][:], dtype=np.float32)
+        if self.config.goal_marker_points:
+            point_cloud = insert_goal_marker_points(
+                point_cloud,
+                np.asarray(data["target_position"][:], dtype=np.float32),
+                num_points=self.config.goal_marker_points,
+                radius=self.config.goal_marker_radius,
+            )
         return LinearNormalizer.standardize_from_data(
             {
-                "point_cloud": np.asarray(data["point_cloud"][:], dtype=np.float32),
+                "point_cloud": point_cloud,
                 "agent_pos": np.asarray(data["state"][:], dtype=np.float32),
                 "action": np.asarray(data["action"][:], dtype=np.float32),
             }
@@ -127,9 +146,17 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
         if idx < 0 or idx >= len(self):
             raise IndexError(idx)
         sample = self._sample_sequence(idx)
+        point_cloud = sample["point_cloud"].astype(np.float32)
+        if self.config.goal_marker_points:
+            point_cloud = insert_goal_marker_points(
+                point_cloud,
+                sample["target_position"].astype(np.float32),
+                num_points=self.config.goal_marker_points,
+                radius=self.config.goal_marker_radius,
+            )
         return {
             "obs": {
-                "point_cloud": torch.from_numpy(sample["point_cloud"].astype(np.float32)),
+                "point_cloud": torch.from_numpy(point_cloud),
                 "agent_pos": torch.from_numpy(sample["state"].astype(np.float32)),
             },
             "action": torch.from_numpy(sample["action"].astype(np.float32)),
@@ -138,6 +165,8 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
     def _validate_arrays(self) -> None:
         data = self.root["data"]
         required = {"point_cloud", "state", "action"}
+        if self.config.goal_marker_points:
+            required.add("target_position")
         missing = required.difference(data.keys())
         if missing:
             raise ValueError(f"dataset missing required arrays: {sorted(missing)}")
@@ -149,10 +178,21 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
                 )
         if data["point_cloud"].ndim != 3 or data["point_cloud"].shape[2] != 3:
             raise ValueError("/data/point_cloud must have shape [T, N, 3]")
+        if (
+            self.config.goal_marker_points
+            and self.config.goal_marker_points >= data["point_cloud"].shape[1]
+        ):
+            raise ValueError(
+                "goal_marker_points must be smaller than the stored point-cloud point count"
+            )
         if data["state"].ndim != 2:
             raise ValueError("/data/state must have shape [T, state_dim]")
         if data["action"].ndim != 2:
             raise ValueError("/data/action must have shape [T, action_dim]")
+        if self.config.goal_marker_points and (
+            data["target_position"].ndim != 2 or data["target_position"].shape[1] != 3
+        ):
+            raise ValueError("/data/target_position must have shape [T, 3]")
 
     def _episode_mask(self, split: Split) -> np.ndarray:
         if split == "all":
@@ -182,7 +222,11 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
                 sample_end_idx=int(sample_end),
                 sequence_length=self.config.horizon,
             )
-            for key in ("point_cloud", "state", "action")
+            for key in (
+                ("point_cloud", "state", "action", "target_position")
+                if self.config.goal_marker_points
+                else ("point_cloud", "state", "action")
+            )
         }
 
 

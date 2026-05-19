@@ -9,6 +9,10 @@ import torch
 
 from pg3d.policies.dp3 import ReachDatasetConfig, ReachSequenceDataset, SimpleDP3
 from pg3d.policies.dp3.checkpoint import load_reach_policy_from_checkpoint
+from pg3d.policies.dp3.goal_markers import (
+    DEFAULT_GOAL_MARKER_POINTS,
+    DEFAULT_GOAL_MARKER_RADIUS,
+)
 from pg3d.policies.dp3.utils import dict_apply
 from pg3d.utils.devices import select_device
 
@@ -16,6 +20,21 @@ from pg3d.utils.devices import select_device
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     device = select_device(args.device)
+    policy = (
+        load_reach_policy_from_checkpoint(
+            args.checkpoint,
+            device=device,
+            prefer_ema=args.checkpoint_model == "ema",
+        )
+        if args.checkpoint is not None
+        else None
+    )
+    goal_marker_points = (
+        int(policy.goal_marker_points) if policy is not None else args.goal_marker_points
+    )
+    goal_marker_radius = (
+        float(policy.goal_marker_radius) if policy is not None else args.goal_marker_radius
+    )
     dataset = ReachSequenceDataset(
         ReachDatasetConfig(
             dataset_path=args.dataset,
@@ -23,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
             n_obs_steps=args.n_obs_steps,
             val_ratio=0.0,
             seed=args.seed,
+            goal_marker_points=goal_marker_points,
+            goal_marker_radius=goal_marker_radius,
         ),
         split="all",
     )
@@ -34,15 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         shuffle=False,
         num_workers=0,
     )
-    policy = (
-        load_reach_policy_from_checkpoint(
-            args.checkpoint,
-            device=device,
-            prefer_ema=args.checkpoint_model == "ema",
-        )
-        if args.checkpoint is not None
-        else _build_untrained_policy(args, dataset=dataset, device=device)
-    )
+    if policy is None:
+        policy = _build_untrained_policy(args, dataset=dataset, device=device)
 
     total_mse = 0.0
     total_batches = 0
@@ -69,6 +83,8 @@ def main(argv: list[str] | None = None) -> int:
         "checkpoint": str(args.checkpoint) if args.checkpoint is not None else None,
         "batches": total_batches,
         "mean_demo_mse": total_mse / max(total_batches, 1),
+        "goal_marker_points": goal_marker_points,
+        "goal_marker_radius": goal_marker_radius,
         "device": str(device),
     }
     print("summary: " + json.dumps(summary, sort_keys=True))
@@ -91,6 +107,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--horizon", type=int, default=16)
     parser.add_argument("--n-obs-steps", type=int, default=2)
     parser.add_argument("--n-action-steps", type=int, default=8)
+    parser.add_argument("--goal-marker-points", type=int, default=DEFAULT_GOAL_MARKER_POINTS)
+    parser.add_argument("--goal-marker-radius", type=float, default=DEFAULT_GOAL_MARKER_RADIUS)
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--max-batches", type=int, default=1)
     parser.add_argument("--num-inference-steps", type=int, default=4)
@@ -99,7 +117,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--down-dims", type=int, nargs="+", default=[64, 128])
     parser.add_argument("--kernel-size", type=int, default=3)
     parser.add_argument("--n-groups", type=int, default=8)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.goal_marker_points < 0:
+        raise ValueError("--goal-marker-points must be non-negative")
+    if args.goal_marker_radius < 0:
+        raise ValueError("--goal-marker-radius must be non-negative")
+    return args
 
 
 def _build_untrained_policy(
@@ -119,6 +142,8 @@ def _build_untrained_policy(
         down_dims=tuple(args.down_dims),
         kernel_size=args.kernel_size,
         n_groups=args.n_groups,
+        goal_marker_points=args.goal_marker_points,
+        goal_marker_radius=args.goal_marker_radius,
         pointcloud_encoder_cfg={
             "out_channels": args.encoder_output_dim,
             "use_layernorm": True,

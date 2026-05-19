@@ -145,7 +145,34 @@ Use the `step` timeline in the Rerun viewer and press play.
 
 The dataset writer uses `PG3DReach-Narrow-v0`, `obs_mode="pointcloud"`, `pd_joint_pos`,
 Panda arm-only 7D DP3 action labels, one extra action chunk of post-success hold-pose data, and a
-fixed-size cropped point cloud by default.
+fixed-size cropped point cloud by default. `PG3DReach-BalancedWorkspace-v0` is the P11 base-reach
+reliability distribution.
+
+Generate a small P11 balanced diagnostic dataset:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-BalancedWorkspace-v0 \
+  --num-demos 100 \
+  --max-attempts 200 \
+  --max-steps-per-demo 100 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --output artifacts/reach-datasets/pg3d-reach-balanced-100.zarr \
+  --overwrite
+```
+
+Inspect target distribution, raw goal visibility, ordered marker correctness, and train/validation
+region balance:
+
+```bash
+uv run python scripts/diagnose_reach_dataset.py \
+  --dataset artifacts/reach-datasets/pg3d-reach-balanced-100.zarr \
+  --goal-marker-points 16 \
+  --goal-marker-radius 0.015 \
+  --val-ratio 0.1 \
+  --split-seed 42
+```
 
 Pilot before launching the 500-episode dataset:
 
@@ -383,12 +410,77 @@ uv run python scripts/train_dp3_reach.py \
 
 The trainer defaults to `pad_after=n_action_steps-1`, cosine LR with warmup, AdamW
 `betas=(0.95, 0.999)`, gradient clipping, EMA checkpoint state, and W&B validation/action-error
-metrics. It writes periodic `step_XXXXXXXX.pt` checkpoints and a final
+metrics. P11 training also defaults to `--goal-marker-points 16 --goal-marker-radius 0.015`,
+which overwrites the final K policy-visible point slots with ordered target markers. Pass
+`--goal-marker-points 0` only for old-checkpoint compatibility or ablations. The trainer writes
+periodic `step_XXXXXXXX.pt` checkpoints and a final
 `final_step_XXXXXXXX.pt` checkpoint under `--checkpoint-dir`. When W&B is active,
 it attempts to log checkpoint-time rollout MP4s. Pass `--checkpoint-rollout-dataset "$VAL_DATASET"`
 to use a deterministic random subset of five held-out validation episodes at every checkpoint
 instead of mixed train/fresh seeds. Use `--no-checkpoint-rollout-videos` to skip
 simulator/rendering rollouts during training.
+
+Balanced workspace P11 pilot recipe:
+
+```bash
+export BAL_DATASET="$ART/pg3d-reach-balanced-1000.zarr"
+export BAL_VAL_DATASET="$ART/pg3d-reach-balanced-val-100.zarr"
+export BAL_CKPTS="$ART/dp3-reach-balanced-1000-checkpoints"
+```
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-BalancedWorkspace-v0 \
+  --num-demos 1000 \
+  --max-attempts 1800 \
+  --max-steps-per-demo 100 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --seed-start 0 \
+  --output "$BAL_DATASET" \
+  --overwrite
+```
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-BalancedWorkspace-v0 \
+  --num-demos 100 \
+  --max-attempts 300 \
+  --max-steps-per-demo 100 \
+  --hold-steps 8 \
+  --num-points 512 \
+  --seed-start 20000 \
+  --output "$BAL_VAL_DATASET" \
+  --overwrite
+```
+
+```bash
+uv run python scripts/train_dp3_reach.py \
+  --dataset "$BAL_DATASET" \
+  --device cuda \
+  --max-steps 50000 \
+  --batch-size 128 \
+  --num-workers 4 \
+  --val-ratio 0.1 \
+  --val-every 500 \
+  --max-val-batches 8 \
+  --goal-marker-points 16 \
+  --goal-marker-radius 0.015 \
+  --lr 1e-4 \
+  --warmup-steps 1000 \
+  --grad-clip-norm 1.0 \
+  --use-ema \
+  --wandb-mode online \
+  --wandb-project pg3d \
+  --wandb-name dp3-reach-balanced-1000-goal-tokens \
+  --checkpoint-dir "$BAL_CKPTS" \
+  --checkpoint-every 5000 \
+  --checkpoint-rollout-dataset "$BAL_VAL_DATASET" \
+  --checkpoint-rollout-count 5 \
+  --checkpoint-rollout-selection-seed 0 \
+  --checkpoint-rollout-max-steps 80 \
+  --checkpoint-rollout-post-success-steps 8
+```
 
 Run closed-loop policy rollouts in ManiSkill and save MP4/Rerun artifacts:
 

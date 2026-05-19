@@ -1,6 +1,6 @@
 # pg3d status
 
-Last updated: 2026-05-17
+Last updated: 2026-05-19
 
 ## Current objective
 
@@ -54,14 +54,23 @@ mixed train/fresh seeds. Constrained-eval visualization artifacts now also show 
 avoid-region geometry: Rerun exports log persistent keep-out wireframes, and MP4s use a
 best-effort separate render-only ManiSkill env so visual overlays do not alter policy observations
 or simulator control.
+P11 starts the base-reach reliability pass. DP3 reach policy inputs now reserve an ordered tail
+slice of the XYZ point cloud for deterministic goal tokens by default
+(`goal_marker_points=16`, `goal_marker_radius=0.015`), while keeping public policy keys limited to
+`obs.point_cloud`, `obs.agent_pos`, and `action`. The encoder preserves those ordered tokens through
+a small marker MLP branch instead of relying on PointNet's permutation-invariant scene branch.
+`PG3DReach-BalancedWorkspace-v0` adds a 70/30 mixed practical/workspace target distribution that
+avoids the previous workspace extremes but still tests spatial coverage.
 
 ## Immediate next steps
 
-1. Debug base DP3 reach success on the held-out 50-episode workspace validation set before drawing
-   conclusions about constraint controllers.
-2. Inspect validation-set MP4/Rerun artifacts, rollout horizons, checkpoint quality, and
-   train/eval distribution match to explain the current 2% reach success.
-3. After base reach is reliable, rerun base/rejection/reranking with the fixed validation workflow
+1. Generate and inspect a small `PG3DReach-BalancedWorkspace-v0` diagnostic dataset with ordered
+   goal tokens enabled.
+2. Run a 20-episode overfit check with `goal_marker_points=16`; require near-perfect dataset-seed
+   closed-loop reach before scaling.
+3. Train/evaluate the 1000-demo balanced reach checkpoint and report region-stratified validation
+   success before drawing conclusions about constraint controllers.
+4. After base reach is reliable, rerun base/rejection/reranking with the fixed validation workflow
    and tune K/horizon/avoid-region settings before reporting any reach-only claims.
 
 ## Active risks
@@ -99,7 +108,10 @@ or simulator control.
   stored separately for replay.
 - Reach dataset replay can now save MP4 videos and per-episode Rerun timeline artifacts.
 - DP3 reach training consumes only point cloud, agent position, and action arrays; simulator
-  ground-truth/debug arrays stay out of policy batches.
+  ground-truth/debug arrays stay out of policy batches. For P11 reach reliability, the loader and
+  live policy-input adapters overwrite the final K point-cloud slots with deterministic ordered
+  target markers derived from `/data/target_position`; no separate scalar target key is exposed to
+  the policy by default.
 - Standalone DP3 policy rollout visualization is local-first: MP4, Rerun `.rrd`, `metrics.jsonl`,
   and `summary.json`. The trainer can also upload a small configurable set of checkpoint-time MP4
   rollout videos to W&B when W&B and ManiSkill rendering are available.
@@ -114,6 +126,9 @@ or simulator control.
   robot-segmented point clouds. Pure URDF/FK mesh sampling remains a later optimization.
 - Pre-constraints reach policy training should use `PG3DReach-Workspace-v0`, which samples goals
   uniformly over `x[-0.30, 0.40]`, `y[-0.35, 0.35]`, and `z[0.15, 0.75]`.
+- P11 nominal reach training should use `PG3DReach-BalancedWorkspace-v0` for the next reliability
+  pass: 70% core-practical goals in `x[-0.14, 0.24]`, `y[-0.20, 0.20]`, `z[0.28, 0.56]`, plus
+  30% bounded-practical goals in `x[-0.26, 0.34]`, `y[-0.30, 0.30]`, `z[0.20, 0.68]`.
 - Constraint v0 is Python-object first with JSON config round-trips; full robot collision and IK are
   deferred.
 - Composition v0 is policy-generic and simulator-free. The real DP3 adapter should wrap
@@ -136,6 +151,8 @@ or simulator control.
   constraint selection.
 - Code-only waypoint planning is a strong reach baseline and remains unimplemented in P10; any
   first constrained-reach results should document that limitation.
+- Franka gripper / custom URDF / Robotiq work is deferred to a later non-critical manipulation
+  milestone; it should not block the current base reach reliability pass.
 
 ## Latest work log
 
@@ -178,4 +195,7 @@ See `docs/worklog/`.
   batched DP3 sampling, fast-mode render counts, and lazy eval imports.
   Avoid-region artifact visualization adds pure wireframe tests plus a constrained-eval MP4 overlay
   path that falls back to plain video if the separate render-only ManiSkill env cannot create
-  visual actors.
+  visual actors. P11 ordered goal tokens and balanced workspace sampling add pure tests for marker
+  insertion, encoder branching, rollout/eval input transforms, reach metadata, and checkpoint-aware
+  training defaults; the dataset generation and retraining commands have been verified on the
+  user's workstation.

@@ -81,6 +81,21 @@ def test_workspace_reach_task_defaults_are_simulator_free() -> None:
     assert metadata["goal_bounds"] == [[-0.3, 0.4], [-0.35, 0.35], [0.15, 0.75]]
 
 
+def test_balanced_workspace_reach_task_metadata_has_weighted_regions() -> None:
+    metadata = reach_task_metadata("PG3DReach-BalancedWorkspace-v0")
+
+    assert metadata["goal_bounds"] == [[-0.26, 0.34], [-0.3, 0.3], [0.2, 0.68]]
+    assert metadata["goal_regions"][0]["name"] == "core_practical"
+    assert metadata["goal_regions"][0]["weight"] == 0.7
+    assert metadata["goal_regions"][0]["bounds"] == [
+        [-0.14, 0.24],
+        [-0.2, 0.2],
+        [0.28, 0.56],
+    ]
+    assert metadata["goal_regions"][1]["name"] == "outer_practical"
+    assert metadata["goal_regions"][1]["weight"] == 0.3
+
+
 class _FakePose:
     def __init__(self, p=None, q=None) -> None:
         self.p = np.asarray([0.0, 0.0, 0.2] if p is None else p, dtype=np.float32)

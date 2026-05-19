@@ -70,6 +70,28 @@ Done when:
 - A smoke-scale training run starts and loads data correctly.
 - A real training run produces a checkpoint and nominal reach evaluation.
 
+## M3.5 — P11 balanced reach reliability
+
+Goal: make base DP3 reach reliable before interpreting constrained reach.
+
+Deliverables:
+
+- Ordered target-marker tokens in the final K point-cloud slots, default `K=16`, with checkpointed
+  marker settings and `K=0` compatibility for old checkpoints/ablations.
+- DP3 encoder branch that preserves ordered marker semantics separately from the PointNet scene
+  branch.
+- `PG3DReach-BalancedWorkspace-v0` target distribution: 70% core-practical and 30%
+  bounded-practical workspace samples, avoiding the old workspace extremes.
+- Dataset diagnostic command for target distribution, raw goal visibility, marker correctness, and
+  train/validation region balance.
+- Region-stratified validation reporting before P10 is rerun.
+
+Done when:
+
+- A 20-episode overfit check reaches near-perfect dataset-seed closed-loop success.
+- A held-out balanced validation run reaches at least 80% overall success, at least 90% core-region
+  success, and median final distance below 2.5 cm, or the blocker is documented.
+
 ## M4 — Kinematic point-cloud world model v0
 
 Goal: imagine future robot geometry and end-effector paths from candidate joint-action chunks.

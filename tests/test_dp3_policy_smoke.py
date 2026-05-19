@@ -13,6 +13,14 @@ def test_tiny_dp3_policy_instantiates() -> None:
     assert policy.obs_feature_dim > 0
 
 
+def test_tiny_dp3_policy_supports_ordered_goal_marker_branch() -> None:
+    policy = make_tiny_policy(goal_marker_points=4)
+
+    assert policy.goal_marker_points == 4
+    assert policy.obs_encoder.goal_marker_mlp is not None
+    assert policy.obs_feature_dim > 80
+
+
 def test_tiny_dp3_predict_action_cpu() -> None:
     torch.manual_seed(0)
     policy = make_tiny_policy()

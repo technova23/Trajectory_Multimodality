@@ -20,6 +20,10 @@ from pg3d.envs.maniskill_adapter.dataset import (
 )
 from pg3d.policies.dp3 import SimpleDP3
 from pg3d.policies.dp3.checkpoint import load_reach_policy_from_checkpoint
+from pg3d.policies.dp3.goal_markers import (
+    DEFAULT_GOAL_MARKER_RADIUS,
+    insert_goal_marker_points,
+)
 from pg3d.utils.arrays import (
     bool_any as _bool_any,
 )
@@ -228,7 +232,12 @@ def run_policy_rollout(
 
     while steps < max_steps:
         with torch.no_grad():
-            policy_input = obs_window_to_torch(obs_window, device=device)
+            policy_input = obs_window_to_torch(
+                obs_window,
+                device=device,
+                goal_marker_points=int(policy.goal_marker_points),
+                goal_marker_radius=float(policy.goal_marker_radius),
+            )
             policy_output = policy.predict_action(policy_input)
             action_chunk = policy_output["action"][0].detach().cpu().numpy()
 
@@ -399,9 +408,19 @@ def obs_window_to_torch(
     window: list[dict[str, np.ndarray | bool | float]],
     *,
     device: torch.device,
+    goal_marker_points: int = 0,
+    goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS,
 ) -> dict[str, torch.Tensor]:
     """Convert a rolling observation window into a batched DP3 observation dict."""
     point_cloud = np.stack([entry["point_cloud"] for entry in window], axis=0)
+    if goal_marker_points:
+        target_position = np.stack([entry["target_position"] for entry in window], axis=0)
+        point_cloud = insert_goal_marker_points(
+            point_cloud,
+            target_position,
+            num_points=goal_marker_points,
+            radius=goal_marker_radius,
+        )
     agent_pos = np.stack([entry["agent_pos"] for entry in window], axis=0)
     return {
         "point_cloud": torch.from_numpy(point_cloud.astype(np.float32)).unsqueeze(0).to(device),

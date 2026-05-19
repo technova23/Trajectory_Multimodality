@@ -118,6 +118,8 @@ def test_checkpoint_dir_replaces_checkpoint_out_cli(tmp_path: Path) -> None:
 
     default_seed_args = train.parse_args(["--max-steps", "1", "--seed", "9"])
     assert default_seed_args.checkpoint_rollout_selection_seed == 9
+    assert default_seed_args.goal_marker_points == 16
+    assert default_seed_args.goal_marker_radius == 0.015
 
 
 def test_trainer_writes_periodic_and_final_checkpoints(tmp_path: Path) -> None:
@@ -144,6 +146,8 @@ def test_trainer_writes_periodic_and_final_checkpoints(tmp_path: Path) -> None:
             "2",
             "--n-action-steps",
             "1",
+            "--goal-marker-points",
+            "2",
             "--encoder-output-dim",
             "16",
             "--diffusion-step-embed-dim",

@@ -306,7 +306,12 @@ def run_comparison_episode(
         if sim_first_success_step is not None and wm_first_success_step is not None:
             break
         with torch.no_grad():
-            policy_input = obs_window_to_torch(obs_window, device=device)
+            policy_input = obs_window_to_torch(
+                obs_window,
+                device=device,
+                goal_marker_points=int(policy.goal_marker_points),
+                goal_marker_radius=float(policy.goal_marker_radius),
+            )
             policy_output = policy.predict_action(policy_input)
             policy_actions = policy_output["action"][0].detach().cpu().numpy()
 

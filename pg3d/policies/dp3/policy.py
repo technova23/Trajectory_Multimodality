@@ -8,6 +8,7 @@ import torch
 import torch.nn.functional as F
 from diffusers.schedulers.scheduling_ddim import DDIMScheduler
 
+from pg3d.policies.dp3.goal_markers import DEFAULT_GOAL_MARKER_RADIUS
 from pg3d.policies.dp3.modules import (
     ConditionalUnet1D,
     DP3Encoder,
@@ -66,6 +67,9 @@ class SimpleDP3(BasePolicy):
         encoder_output_dim: int = 64,
         use_pc_color: bool = False,
         pointcloud_encoder_cfg: Mapping[str, object] | None = None,
+        goal_marker_points: int = 0,
+        goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS,
+        goal_marker_feature_dim: int = 32,
     ) -> None:
         super().__init__()
         self.condition_type = condition_type
@@ -76,6 +80,12 @@ class SimpleDP3(BasePolicy):
         self.n_action_steps = n_action_steps
         self.n_obs_steps = n_obs_steps
         self.obs_as_global_cond = obs_as_global_cond
+        self.goal_marker_points = int(goal_marker_points)
+        self.goal_marker_radius = float(goal_marker_radius)
+        if self.goal_marker_points < 0:
+            raise ValueError("goal_marker_points must be non-negative")
+        if self.goal_marker_radius < 0:
+            raise ValueError("goal_marker_radius must be non-negative")
 
         action_shape = tuple(shape_meta["action"]["shape"])
         if len(action_shape) == 1:
@@ -92,6 +102,8 @@ class SimpleDP3(BasePolicy):
             out_channel=encoder_output_dim,
             pointcloud_encoder_cfg=pointcloud_encoder_cfg,
             use_pc_color=use_pc_color,
+            goal_marker_points=self.goal_marker_points,
+            goal_marker_feature_dim=goal_marker_feature_dim,
         )
         self.obs_feature_dim = self.obs_encoder.output_shape()
         input_dim = self.action_dim

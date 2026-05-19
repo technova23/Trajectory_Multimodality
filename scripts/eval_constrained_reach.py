@@ -57,6 +57,10 @@ from pg3d.policies.dp3.checkpoint import (
     latest_reach_checkpoint,
     load_reach_policy_from_checkpoint,
 )
+from pg3d.policies.dp3.goal_markers import (
+    DEFAULT_GOAL_MARKER_RADIUS,
+    insert_goal_marker_points,
+)
 from pg3d.utils.arrays import bool_any as _bool_any
 from pg3d.utils.arrays import bool_info as _bool_info
 from pg3d.utils.arrays import frame_to_numpy as _frame_to_numpy
@@ -130,7 +134,15 @@ class DP3ChunkPolicyAdapter:
         if k <= 0:
             raise ValueError("k must be positive")
         with self.timer.time("policy_sampling", windows=1, samples=k):
-            batch = _repeat_obs_window_to_torch(policy_input, k=k, device=self.device)
+            batch = _repeat_obs_window_to_torch(
+                policy_input,
+                k=k,
+                device=self.device,
+                goal_marker_points=int(getattr(self.policy, "goal_marker_points", 0)),
+                goal_marker_radius=float(
+                    getattr(self.policy, "goal_marker_radius", DEFAULT_GOAL_MARKER_RADIUS)
+                ),
+            )
             actions = self._predict_actions(batch)
         return [
             ActionChunk(
@@ -156,7 +168,14 @@ class DP3ChunkPolicyAdapter:
         with self.timer.time("policy_sampling", windows=len(policy_inputs), samples=1):
             for start in range(0, len(policy_inputs), self.policy_batch_size):
                 batch_windows = policy_inputs[start : start + self.policy_batch_size]
-                batch = _obs_windows_to_torch(batch_windows, device=self.device)
+                batch = _obs_windows_to_torch(
+                    batch_windows,
+                    device=self.device,
+                    goal_marker_points=int(getattr(self.policy, "goal_marker_points", 0)),
+                    goal_marker_radius=float(
+                        getattr(self.policy, "goal_marker_radius", DEFAULT_GOAL_MARKER_RADIUS)
+                    ),
+                )
                 actions.append(self._predict_actions(batch))
         stacked = np.concatenate(actions, axis=0)
         return [
@@ -1195,8 +1214,15 @@ def _repeat_obs_window_to_torch(
     *,
     k: int,
     device: torch.device,
+    goal_marker_points: int = 0,
+    goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS,
 ) -> dict[str, torch.Tensor]:
-    batch = obs_window_to_torch(window, device=device)
+    batch = obs_window_to_torch(
+        window,
+        device=device,
+        goal_marker_points=goal_marker_points,
+        goal_marker_radius=goal_marker_radius,
+    )
     return {
         key: value.repeat((k, *([1] * (value.ndim - 1))))
         for key, value in batch.items()
@@ -1207,6 +1233,8 @@ def _obs_windows_to_torch(
     windows: list[list[Entry]],
     *,
     device: torch.device,
+    goal_marker_points: int = 0,
+    goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS,
 ) -> dict[str, torch.Tensor]:
     if not windows:
         raise ValueError("windows must not be empty")
@@ -1214,6 +1242,20 @@ def _obs_windows_to_torch(
         [np.stack([entry["point_cloud"] for entry in window], axis=0) for window in windows],
         axis=0,
     )
+    if goal_marker_points:
+        target_position = np.stack(
+            [
+                np.stack([entry["target_position"] for entry in window], axis=0)
+                for window in windows
+            ],
+            axis=0,
+        )
+        point_cloud = insert_goal_marker_points(
+            point_cloud,
+            target_position,
+            num_points=goal_marker_points,
+            radius=goal_marker_radius,
+        )
     agent_pos = np.stack(
         [np.stack([entry["agent_pos"] for entry in window], axis=0) for window in windows],
         axis=0,

@@ -339,6 +339,8 @@ class DP3Encoder(nn.Module):
         state_mlp_size: Sequence[int] = (64, 64),
         use_pc_color: bool = False,
         pointcloud_encoder_cfg: Mapping[str, object] | None = None,
+        goal_marker_points: int = 0,
+        goal_marker_feature_dim: int = 32,
     ) -> None:
         super().__init__()
         self.point_cloud_key = "point_cloud"
@@ -346,10 +348,27 @@ class DP3Encoder(nn.Module):
         self.use_pc_color = use_pc_color
         self.point_cloud_shape = tuple(observation_space[self.point_cloud_key])
         self.state_shape = tuple(observation_space[self.state_key])
+        self.goal_marker_points = int(goal_marker_points)
+        if self.goal_marker_points < 0:
+            raise ValueError("goal_marker_points must be non-negative")
+        if self.goal_marker_points and self.goal_marker_points >= self.point_cloud_shape[0]:
+            raise ValueError(
+                "goal_marker_points must be smaller than the point-cloud point count"
+            )
         pointcloud_encoder_cfg = dict(pointcloud_encoder_cfg or {})
         pointcloud_encoder_cfg["in_channels"] = 6 if use_pc_color else 3
         pointcloud_encoder_cfg.setdefault("out_channels", out_channel)
         self.extractor = PointNetEncoderXYZ(**pointcloud_encoder_cfg)
+        if self.goal_marker_points:
+            marker_input_dim = self.goal_marker_points * 3
+            self.goal_marker_mlp = nn.Sequential(
+                nn.Linear(marker_input_dim, goal_marker_feature_dim),
+                nn.ReLU(),
+                nn.Linear(goal_marker_feature_dim, goal_marker_feature_dim),
+                nn.ReLU(),
+            )
+        else:
+            self.goal_marker_mlp = None
 
         if len(state_mlp_size) == 0:
             raise ValueError("state_mlp_size must not be empty")
@@ -358,7 +377,11 @@ class DP3Encoder(nn.Module):
         self.state_mlp = nn.Sequential(
             *create_mlp(self.state_shape[0], output_dim, net_arch, nn.ReLU)
         )
-        self.n_output_channels = out_channel + output_dim
+        self.n_output_channels = (
+            out_channel
+            + output_dim
+            + (goal_marker_feature_dim if self.goal_marker_points else 0)
+        )
 
     def forward(self, observations: Mapping[str, torch.Tensor]) -> torch.Tensor:
         """Encode ``point_cloud`` and ``agent_pos`` observation tensors."""
@@ -367,9 +390,18 @@ class DP3Encoder(nn.Module):
             points = points[..., :3]
         if len(points.shape) != 3:
             raise ValueError(f"point_cloud must be [B, N, C], got {tuple(points.shape)}")
-        point_feat = self.extractor(points)
+        features = []
+        if self.goal_marker_points:
+            scene_points = points[:, : -self.goal_marker_points]
+            marker_points = points[:, -self.goal_marker_points :]
+            features.append(self.extractor(scene_points))
+            assert self.goal_marker_mlp is not None
+            features.append(self.goal_marker_mlp(marker_points.reshape(marker_points.shape[0], -1)))
+        else:
+            features.append(self.extractor(points))
         state_feat = self.state_mlp(observations[self.state_key])
-        return torch.cat([point_feat, state_feat], dim=-1)
+        features.append(state_feat)
+        return torch.cat(features, dim=-1)
 
     def output_shape(self) -> int:
         """Return the encoder feature width."""

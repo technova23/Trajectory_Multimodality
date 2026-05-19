@@ -4,11 +4,13 @@ import subprocess
 import sys
 
 import numpy as np
+import torch
 
 from scripts.rollout_dp3_reach_policy import (
     _distance_drift,
     append_obs_window,
     make_initial_obs_window,
+    obs_window_to_torch,
     policy_action_to_sim_action,
     rollout_spec_video_stem,
     select_mixed_rollout_specs,
@@ -167,6 +169,21 @@ def test_rollout_spec_video_stem_includes_validation_episode_identity() -> None:
 
 def test_distance_drift_ignores_non_finite_values() -> None:
     assert np.isclose(_distance_drift([0.02, float("nan"), 0.05, 0.03]), 0.03)
+
+
+def test_obs_window_to_torch_inserts_goal_marker_tail_points() -> None:
+    window = [_entry(0.0), _entry(1.0)]
+
+    batch = obs_window_to_torch(
+        window,
+        device=torch.device("cpu"),
+        goal_marker_points=2,
+        goal_marker_radius=0.015,
+    )
+
+    points = batch["point_cloud"].cpu().numpy()
+    np.testing.assert_allclose(points[0, 0, -2:, :], np.zeros((2, 3), dtype=np.float32))
+    np.testing.assert_allclose(points[0, 1, -2:, :], np.ones((2, 3), dtype=np.float32))
 
 
 def test_rollout_script_import_keeps_simulator_lazy() -> None:

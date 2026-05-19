@@ -13,7 +13,7 @@ from mani_skill.utils.registration import register_env
 from mani_skill.utils.scene_builder.table import TableSceneBuilder
 from mani_skill.utils.structs.pose import Pose
 
-from pg3d.envs.maniskill_adapter.reach_config import REACH_TASK_SPECS
+from pg3d.envs.maniskill_adapter.reach_config import REACH_TASK_SPECS, ReachGoalRegion
 
 
 class PG3DReachEnv(BaseEnv):
@@ -28,6 +28,7 @@ class PG3DReachEnv(BaseEnv):
         robot_uids: str = "panda",
         goal_center: tuple[float, float, float] = (0.0, 0.0, 0.35),
         goal_half_extents: tuple[float, float, float] = (0.08, 0.08, 0.08),
+        goal_regions: tuple[ReachGoalRegion, ...] = (),
         goal_thresh: float = 0.025,
         require_static: bool = False,
         robot_init_qpos_noise: float = 0.0,
@@ -35,6 +36,7 @@ class PG3DReachEnv(BaseEnv):
     ) -> None:
         self.goal_center = goal_center
         self.goal_half_extents = goal_half_extents
+        self.goal_regions = tuple(goal_regions)
         self.goal_thresh = goal_thresh
         self.require_static = require_static
         self.robot_init_qpos_noise = robot_init_qpos_noise
@@ -73,9 +75,32 @@ class PG3DReachEnv(BaseEnv):
         with torch.device(self.device):
             self.table_scene.initialize(env_idx)
             batch_size = len(env_idx)
-            center = torch.tensor(self.goal_center, dtype=torch.float32)
-            half_extents = torch.tensor(self.goal_half_extents, dtype=torch.float32)
-            goal_xyz = center + (torch.rand((batch_size, 3)) * 2.0 - 1.0) * half_extents
+            if self.goal_regions:
+                weights = torch.tensor(
+                    [region.weight for region in self.goal_regions],
+                    dtype=torch.float32,
+                )
+                region_indices = torch.multinomial(
+                    weights / weights.sum(),
+                    batch_size,
+                    replacement=True,
+                )
+                centers = torch.tensor(
+                    [region.center for region in self.goal_regions],
+                    dtype=torch.float32,
+                )
+                half_extents = torch.tensor(
+                    [region.half_extents for region in self.goal_regions],
+                    dtype=torch.float32,
+                )
+                goal_xyz = (
+                    centers[region_indices]
+                    + (torch.rand((batch_size, 3)) * 2.0 - 1.0) * half_extents[region_indices]
+                )
+            else:
+                center = torch.tensor(self.goal_center, dtype=torch.float32)
+                half_extents = torch.tensor(self.goal_half_extents, dtype=torch.float32)
+                goal_xyz = center + (torch.rand((batch_size, 3)) * 2.0 - 1.0) * half_extents
             self.goal_site.set_pose(Pose.create_from_pq(goal_xyz))
 
     def _get_obs_extra(self, info: dict[str, Any]) -> dict[str, Any]:
@@ -142,4 +167,16 @@ class PG3DReachWorkspaceEnv(PG3DReachEnv):
         spec = REACH_TASK_SPECS["PG3DReach-Workspace-v0"]
         kwargs.setdefault("goal_center", spec.goal_center)
         kwargs.setdefault("goal_half_extents", spec.goal_half_extents)
+        super().__init__(*args, **kwargs)
+
+
+@register_env("PG3DReach-BalancedWorkspace-v0", max_episode_steps=100)
+class PG3DReachBalancedWorkspaceEnv(PG3DReachEnv):
+    """Mixed practical/workspace distribution for P11 nominal reach reliability."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        spec = REACH_TASK_SPECS["PG3DReach-BalancedWorkspace-v0"]
+        kwargs.setdefault("goal_center", spec.goal_center)
+        kwargs.setdefault("goal_half_extents", spec.goal_half_extents)
+        kwargs.setdefault("goal_regions", spec.goal_regions)
         super().__init__(*args, **kwargs)

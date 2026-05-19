@@ -35,6 +35,7 @@ from scripts.eval_constrained_reach import (
     DP3ChunkPolicyAdapter,
     _artifact_selection_summary,
     _build_multichunk_candidates,
+    _obs_windows_to_torch,
     _seed_torch,
 )
 from scripts.eval_constrained_reach import (
@@ -390,6 +391,22 @@ def test_dp3_adapter_batches_multiple_windows() -> None:
     assert len(chunks) == 3
     assert policy.batch_sizes == [2, 1]
     assert chunks[0].actions.shape == (2, 7)
+
+
+def test_constrained_eval_batch_input_inserts_goal_marker_tail_points() -> None:
+    batch = _obs_windows_to_torch(
+        [_window()],
+        device=torch.device("cpu"),
+        goal_marker_points=2,
+        goal_marker_radius=0.015,
+    )
+
+    points = batch["point_cloud"].cpu().numpy()
+    expected = np.broadcast_to(
+        np.asarray([1.0, 0.0, 0.2], dtype=np.float32),
+        (2, 2, 3),
+    )
+    np.testing.assert_allclose(points[0, :, -2:, :], expected)
 
 
 def test_seed_torch_controls_policy_sampling_rng() -> None:
