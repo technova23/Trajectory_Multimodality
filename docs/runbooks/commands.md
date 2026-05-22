@@ -654,6 +654,92 @@ uv run python scripts/eval_constrained_reach.py \
   --allow-failure
 ```
 
+Balanced 20k nominal-path starter:
+
+```bash
+export BAL_VAL_DATASET="$ART/pg3d-reach-balanced-val-100.zarr"
+export BAL_20K_CKPT="$ART/dp3-reach-balanced-1000-checkpoints/step_00020000.pt"
+export BAL_20K_BASE_OUT="$ART/dp3-reach-balanced-1000-rollouts/val-25-at-20k-iters"
+export BAL_NOMINAL_CONSTRAINTS="$ART/constrained-reach-balanced-20k-nominal-r003-val25"
+export BAL_CONSTRAINED_OUT="$ART/constrained-reach-balanced-20k-r003-val25"
+```
+
+First gate the base checkpoint on the same 25 held-out balanced validation episodes. Stop here if
+fewer than 15 episodes reach; reranking should not be interpreted until base reach is good enough:
+
+```bash
+uv run python scripts/rollout_dp3_reach_policy.py \
+  --checkpoint "$BAL_20K_CKPT" \
+  --checkpoint-model ema \
+  --dataset "$BAL_VAL_DATASET" \
+  --source dataset \
+  --episodes 25 \
+  --device cuda \
+  --max-steps 100 \
+  --post-success-steps 8 \
+  --output-dir "$BAL_20K_BASE_OUT" \
+  --allow-failure
+```
+
+Build fixed nominal-path constraints from the base-success subset. This writes
+`constraints/episode_XXX.json`, `episode_indices.txt`, `paths/episode_XXX.npy`, and
+`manifest.json`. The default sphere is centered at 50% arc length on the successful nominal TCP
+path with radius `0.03m`. The first 2026-05-19 run with the 20k checkpoint selected only 7/25
+base-success episodes, below the 15-success gate, so the main constrained eval should remain
+blocked until base reach improves:
+
+```bash
+uv run python scripts/build_nominal_path_constraints.py \
+  --checkpoint "$BAL_20K_CKPT" \
+  --checkpoint-model ema \
+  --dataset "$BAL_VAL_DATASET" \
+  --episodes 25 \
+  --device cuda \
+  --max-steps 100 \
+  --post-success-steps 8 \
+  --avoid-radius 0.03 \
+  --path-fraction 0.5 \
+  --min-successes 15 \
+  --output-dir "$BAL_NOMINAL_CONSTRAINTS"
+```
+
+When the base gate passes, evaluate all three methods on the exact same selected dataset episodes
+and constraints:
+
+```bash
+uv run python scripts/eval_constrained_reach.py \
+  --checkpoint "$BAL_20K_CKPT" \
+  --checkpoint-model ema \
+  --dataset "$BAL_VAL_DATASET" \
+  --source dataset \
+  --episode-indices-file "$BAL_NOMINAL_CONSTRAINTS/episode_indices.txt" \
+  --constraints-dir "$BAL_NOMINAL_CONSTRAINTS/constraints" \
+  --methods base rejection reranking \
+  --episodes 25 \
+  --device cuda \
+  --seed 0 \
+  --max-steps 100 \
+  --planning-horizon-chunks 2 \
+  --execution-horizon-chunks 1 \
+  --geometry-mode fast \
+  --k-schedule 16 32 64 \
+  --policy-batch-size 128 \
+  --video \
+  --rerun \
+  --artifact-selection random \
+  --artifact-episode-count 5 \
+  --artifact-selection-seed 0 \
+  --plots \
+  --plot-every-episodes 5 \
+  --profile \
+  --profile-every-episodes 5 \
+  --wandb-mode online \
+  --wandb-project pg3d \
+  --wandb-name constrained-reach-balanced-20k-r003-val25 \
+  --output-dir "$BAL_CONSTRAINED_OUT" \
+  --allow-failure
+```
+
 Write a final method comparison plot with Wilson 95% confidence intervals:
 
 ```bash
@@ -689,6 +775,8 @@ PY
 Outputs include `constraints/episode_XXX.json`, `metrics.jsonl`, `decisions.jsonl`,
 `summary.json`, optional `timings.jsonl`, optional `plots/*.png`, optional
 `videos/{method}/episode_XXX.mp4`, and optional `rerun/{method}/episode_XXX.rrd`.
+When `--constraints-dir` is provided, eval copies the loaded precomputed constraints into the
+output constraints directory and records the source in `summary.json`.
 With `--artifact-selection random --artifact-episode-count 5 --artifact-selection-seed 0`,
 metrics still cover all 50 validation episodes, while MP4/Rerun artifacts are written only for
 one deterministic random subset of five validation episodes. The selected output indices, dataset

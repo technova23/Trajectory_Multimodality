@@ -1,6 +1,6 @@
 # pg3d status
 
-Last updated: 2026-05-19
+Last updated: 2026-05-21
 
 ## Current objective
 
@@ -53,25 +53,30 @@ logging. Training checkpoint rollout videos can now use a held-out validation Za
 mixed train/fresh seeds. Constrained-eval visualization artifacts now also show the sampled
 avoid-region geometry: Rerun exports log persistent keep-out wireframes, and MP4s use a
 best-effort separate render-only ManiSkill env so visual overlays do not alter policy observations
-or simulator control.
+or simulator control. The eval runner can also consume precomputed per-episode constraints and a
+fixed dataset episode-index file, so nominal-path avoid regions can be built once from base
+rollouts and reused across base/rejection/reranking comparisons.
 P11 starts the base-reach reliability pass. DP3 reach policy inputs now reserve an ordered tail
 slice of the XYZ point cloud for deterministic goal tokens by default
 (`goal_marker_points=16`, `goal_marker_radius=0.015`), while keeping public policy keys limited to
 `obs.point_cloud`, `obs.agent_pos`, and `action`. The encoder preserves those ordered tokens through
 a small marker MLP branch instead of relying on PointNet's permutation-invariant scene branch.
 `PG3DReach-BalancedWorkspace-v0` adds a 70/30 mixed practical/workspace target distribution that
-avoids the previous workspace extremes but still tests spatial coverage.
+avoids the previous workspace extremes but still tests spatial coverage. The current constrained
+reach candidate is the 20k-step balanced checkpoint at
+`artifacts/reach-datasets/dp3-reach-balanced-1000-checkpoints/step_00020000.pt`, but its first
+25-episode held-out gate selected only 7 base-success episodes, below the 15-episode minimum for
+interpreting constrained reranking.
 
 ## Immediate next steps
 
-1. Generate and inspect a small `PG3DReach-BalancedWorkspace-v0` diagnostic dataset with ordered
-   goal tokens enabled.
-2. Run a 20-episode overfit check with `goal_marker_points=16`; require near-perfect dataset-seed
-   closed-loop reach before scaling.
-3. Train/evaluate the 1000-demo balanced reach checkpoint and report region-stratified validation
-   success before drawing conclusions about constraint controllers.
-4. After base reach is reliable, rerun base/rejection/reranking with the fixed validation workflow
-   and tune K/horizon/avoid-region settings before reporting any reach-only claims.
+1. Diagnose why the 20k balanced checkpoint reached only 7/25 held-out balanced validation
+   episodes in the first gate.
+2. Inspect successful and failed base rollouts from the held-out balanced set, then decide whether
+   to continue training, adjust inference settings, or revisit the training distribution.
+3. Rerun the nominal-path constraint builder only after the 25-episode base gate reaches at least
+   15 successes; target the original 25 selected successes for the starter constrained eval.
+4. Run P10 base/rejection/reranking on the fixed base-success subset only after that gate passes.
 
 ## Active risks
 
@@ -137,6 +142,9 @@ avoids the previous workspace extremes but still tests spatial coverage.
 - Constrained reach eval uses direct-path spherical avoid regions as the first repeatable overlay.
   Planning horizon and execution horizon are separate chunk counts; the default is one planned
   chunk and one executed chunk before re-observation.
+- The P11 balanced-checkpoint constrained rerun uses precomputed nominal-path spherical avoid
+  regions on a held-out base-success subset. This isolates steering behavior from base reach
+  failure, and results must be labeled as base-success-subset constrained evals.
 - Eval geometry mode defaults to `fast`; use `--geometry-mode exact` for one-episode reference
   comparisons when validating speedups.
 - Constrained reach validation should use a held-out solved validation Zarr with `--source dataset`
@@ -198,4 +206,7 @@ See `docs/worklog/`.
   visual actors. P11 ordered goal tokens and balanced workspace sampling add pure tests for marker
   insertion, encoder branching, rollout/eval input transforms, reach metadata, and checkpoint-aware
   training defaults; the dataset generation and retraining commands have been verified on the
-  user's workstation.
+  user's workstation. The 20k balanced constrained-reach starter adds a nominal-path constraint
+  builder, precomputed constraint loading for constrained eval, and pure tests for the new fixed
+  subset protocol. The first 25-episode held-out gate for the 20k checkpoint selected only 7
+  base-success episodes, so the main constrained eval was intentionally not run.

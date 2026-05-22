@@ -13,6 +13,8 @@ import numpy as np
 from pg3d.constraints import (
     AvoidRegion,
     SceneContext,
+    SphereRegion,
+    constraints_from_json,
     constraints_to_json,
     make_obstructing_avoid_region,
 )
@@ -39,6 +41,18 @@ class AvoidOverlayConfig:
     weight: float = 1.0
     tolerance: float = 1e-6
     name: str = "direct_path_avoid_region"
+
+
+@dataclass(frozen=True)
+class NominalPathAvoidConfig:
+    """Configuration for avoid regions placed on a nominal executed TCP path."""
+
+    radius: float = 0.03
+    path_fraction: float = 0.5
+    margin: float = 0.0
+    weight: float = 1.0
+    tolerance: float = 1e-6
+    name: str = "nominal_path_avoid_region"
 
 
 @dataclass
@@ -194,6 +208,31 @@ def direct_path_avoid_region(
     )
 
 
+def nominal_path_avoid_region(
+    tcp_positions: Any,
+    *,
+    config: NominalPathAvoidConfig | None = None,
+) -> AvoidRegion:
+    """Create a sphere centered at a fixed arc-length fraction of an executed TCP path."""
+    cfg = config or NominalPathAvoidConfig()
+    if float(cfg.radius) <= 0.0:
+        raise ValueError("nominal path avoid radius must be positive")
+    if not 0.0 <= float(cfg.path_fraction) <= 1.0:
+        raise ValueError("nominal path fraction must be in [0, 1]")
+    if float(cfg.margin) < 0.0:
+        raise ValueError("nominal path avoid margin must be non-negative")
+    if float(cfg.tolerance) < 0.0:
+        raise ValueError("nominal path avoid tolerance must be non-negative")
+    center = _point_at_arc_fraction(tcp_positions, fraction=float(cfg.path_fraction))
+    return AvoidRegion(
+        region=SphereRegion(center=center, radius=float(cfg.radius)),
+        margin=float(cfg.margin),
+        weight=float(cfg.weight),
+        tolerance=float(cfg.tolerance),
+        name=cfg.name,
+    )
+
+
 def save_episode_constraints(path: Path, constraints: list[AvoidRegion]) -> None:
     """Persist one episode's constraint instances for repeatable evaluation."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -201,6 +240,23 @@ def save_episode_constraints(path: Path, constraints: list[AvoidRegion]) -> None
         json.dumps(jsonable(constraints_to_json(constraints)), indent=2, sort_keys=True),
         encoding="utf-8",
     )
+
+
+def load_episode_constraints(path: Path) -> list[AvoidRegion]:
+    """Load one episode's avoid-region constraints from JSON."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError(f"constraints file must contain a list: {path}")
+    constraints = constraints_from_json(payload)
+    avoid_regions: list[AvoidRegion] = []
+    for idx, constraint in enumerate(constraints):
+        if not isinstance(constraint, AvoidRegion):
+            raise ValueError(
+                f"only AvoidRegion constraints are supported for constrained reach; "
+                f"{path} item {idx} is {type(constraint).__name__}"
+            )
+        avoid_regions.append(constraint)
+    return avoid_regions
 
 
 def scene_context_for_constraints(
@@ -557,6 +613,32 @@ def _mean_std(key: str, rows: list[dict[str, Any]]) -> dict[str, float | None]:
         f"{key}_mean": float(np.mean(array)),
         f"{key}_std": float(np.std(array)),
     }
+
+
+def _point_at_arc_fraction(points: Any, *, fraction: float) -> np.ndarray:
+    path = np.asarray(points, dtype=np.float32)
+    if path.ndim != 2 or path.shape[1] != 3:
+        raise ValueError(f"tcp_positions must have shape [T, 3], got {path.shape}")
+    if path.shape[0] == 0:
+        raise ValueError("tcp_positions must contain at least one point")
+    if not np.all(np.isfinite(path)):
+        raise ValueError("tcp_positions must be finite")
+    if path.shape[0] == 1:
+        return path[0].astype(np.float32, copy=True)
+    segments = path[1:] - path[:-1]
+    lengths = np.linalg.norm(segments, axis=1)
+    total = float(np.sum(lengths))
+    if total <= 1e-9:
+        return path[0].astype(np.float32, copy=True)
+    target_length = float(fraction) * total
+    cumulative = np.cumsum(lengths)
+    segment_idx = int(np.searchsorted(cumulative, target_length, side="left"))
+    segment_idx = min(segment_idx, len(lengths) - 1)
+    previous = 0.0 if segment_idx == 0 else float(cumulative[segment_idx - 1])
+    length = float(lengths[segment_idx])
+    alpha = 0.0 if length <= 1e-9 else (target_length - previous) / length
+    point = path[segment_idx] + np.float32(alpha) * segments[segment_idx]
+    return point.astype(np.float32, copy=False)
 
 
 def _vector3(value: Any, name: str) -> np.ndarray:

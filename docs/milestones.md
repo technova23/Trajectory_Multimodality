@@ -150,6 +150,8 @@ Goal: produce the first scientific go/no-go result.
 Deliverables:
 
 - Evaluation overlay that samples avoid regions near likely nominal paths.
+- Fixed base-success subset workflow with precomputed nominal-path avoid-region JSON for the
+  balanced-checkpoint rerun.
 - Methods: base DP3, DP3+rejection, DP3+world-model reranking, code-only waypoint baseline, simple ITPS-style rank baseline.
 - Metrics: reach success, constraint satisfaction, combined success, min clearance, final target distance, smoothness, candidate feasibility fraction.
 - Confidence intervals and qualitative videos.

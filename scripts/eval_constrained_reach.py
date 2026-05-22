@@ -44,6 +44,7 @@ from pg3d.eval import (
     concatenate_rollouts,
     direct_path_avoid_region,
     episode_metric_row,
+    load_episode_constraints,
     progress_series,
     save_episode_constraints,
     scene_context_for_constraints,
@@ -235,11 +236,12 @@ def main(argv: list[str] | None = None) -> int:
     dataset_episode_seeds = [
         int(episode["seed"]) for episode in metadata.get("episodes", []) if "seed" in episode
     ]
+    episode_indices = _episode_indices_from_args(args)
     specs = select_rollout_specs(
         source=args.source,
         dataset_episode_seeds=dataset_episode_seeds,
         episodes=args.episodes,
-        episode_indices=args.episode_indices,
+        episode_indices=episode_indices,
         seed_start=args.seed_start,
     )
     if not specs:
@@ -292,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
             decisions_path.open("w", encoding="utf-8") as decisions_file,
         ):
             for spec in specs:
-                constraints = _episode_constraints(
+                constraints = _constraints_for_episode(
                     sim_env,
                     spec=spec,
                     crop_config=crop_config,
@@ -394,6 +396,7 @@ def main(argv: list[str] | None = None) -> int:
         "execution_horizon_chunks": args.execution_horizon_chunks,
         "geometry_mode": args.geometry_mode,
         "k_schedule": list(args.k_schedule),
+        "constraint_source": _constraint_source_summary(args),
         "artifact_selection": _artifact_selection_summary(
             specs,
             video_episode_indices=video_episode_indices,
@@ -447,6 +450,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--source", choices=["dataset", "fresh"], default="fresh")
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--episode-indices", type=int, nargs="+", default=None)
+    parser.add_argument(
+        "--episode-indices-file",
+        type=Path,
+        default=None,
+        help="Text file with one dataset episode index per line.",
+    )
     parser.add_argument("--seed-start", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
@@ -467,6 +476,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--avoid-min-radius", type=float, default=0.025)
     parser.add_argument("--avoid-margin", type=float, default=0.0)
     parser.add_argument("--avoid-weight", type=float, default=1.0)
+    parser.add_argument(
+        "--constraints-dir",
+        type=Path,
+        default=None,
+        help="Directory containing precomputed constraints/episode_XXX.json files.",
+    )
     parser.add_argument("--gripper-open", type=float, default=0.04)
     parser.add_argument(
         "--match-current-robot-points",
@@ -517,6 +532,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.episodes <= 0:
         raise ValueError("--episodes must be positive")
+    if args.episode_indices is not None and args.episode_indices_file is not None:
+        raise ValueError("--episode-indices and --episode-indices-file are mutually exclusive")
+    if args.episode_indices_file is not None and args.source != "dataset":
+        raise ValueError("--episode-indices-file requires --source dataset")
     if args.max_steps <= 0:
         raise ValueError("--max-steps must be positive")
     if args.post_success_steps < 0:
@@ -1185,6 +1204,27 @@ def _write_decision(
     decisions_file.flush()
 
 
+def _constraints_for_episode(
+    env: Any,
+    *,
+    spec: RolloutSpec,
+    crop_config: PointCloudCropConfig,
+    args: argparse.Namespace,
+) -> list[AvoidRegion]:
+    if args.constraints_dir is not None:
+        return load_episode_constraints(_precomputed_constraint_path(args.constraints_dir, spec))
+    return _episode_constraints(env, spec=spec, crop_config=crop_config, args=args)
+
+
+def _precomputed_constraint_path(constraints_dir: Path, spec: RolloutSpec) -> Path:
+    path = constraints_dir / f"episode_{spec.output_index:03d}.json"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"missing precomputed constraint file for output episode {spec.output_index}: {path}"
+        )
+    return path
+
+
 def _episode_constraints(
     env: Any,
     *,
@@ -1207,6 +1247,48 @@ def _episode_constraints(
         ),
     )
     return [constraint]
+
+
+def _episode_indices_from_args(args: argparse.Namespace) -> list[int] | None:
+    if args.episode_indices_file is None:
+        return args.episode_indices
+    return _read_episode_indices_file(args.episode_indices_file)
+
+
+def _read_episode_indices_file(path: Path) -> list[int]:
+    indices: list[int] = []
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            value = int(line)
+        except ValueError as exc:
+            raise ValueError(f"{path}:{line_number} is not an integer episode index") from exc
+        if value < 0:
+            raise ValueError(f"{path}:{line_number} episode index must be non-negative")
+        indices.append(value)
+    if not indices:
+        raise ValueError(f"{path} did not contain any episode indices")
+    return indices
+
+
+def _constraint_source_summary(args: argparse.Namespace) -> dict[str, Any]:
+    if args.constraints_dir is not None:
+        return {
+            "type": "precomputed",
+            "constraints_dir": str(args.constraints_dir),
+            "episode_indices_file": (
+                str(args.episode_indices_file) if args.episode_indices_file is not None else None
+            ),
+        }
+    return {
+        "type": "direct_path",
+        "avoid_radius": float(args.avoid_radius),
+        "avoid_min_radius": float(args.avoid_min_radius),
+        "avoid_margin": float(args.avoid_margin),
+        "avoid_weight": float(args.avoid_weight),
+    }
 
 
 def _repeat_obs_window_to_torch(
@@ -1476,6 +1558,7 @@ def _init_wandb(
                 "planning_horizon_chunks": args.planning_horizon_chunks,
                 "execution_horizon_chunks": args.execution_horizon_chunks,
                 "k_schedule": list(args.k_schedule),
+                "constraint_source": _constraint_source_summary(args),
                 "artifact_selection": args.artifact_selection,
                 "artifact_episode_count": args.artifact_episode_count,
                 "artifact_selection_seed": args.artifact_selection_seed,

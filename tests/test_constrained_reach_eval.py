@@ -13,12 +13,15 @@ from pg3d.envs.maniskill_adapter.dataset import PointCloudCropConfig
 from pg3d.eval import (
     AvoidOverlayConfig,
     EpisodePath,
+    NominalPathAvoidConfig,
     TimingRecorder,
     candidate_feasibility_fraction,
     concatenate_rollouts,
     direct_path_avoid_region,
     episode_metric_row,
+    load_episode_constraints,
     min_constraint_clearance,
+    nominal_path_avoid_region,
     path_satisfies_constraints,
     progress_series,
     save_episode_constraints,
@@ -31,11 +34,17 @@ from pg3d.eval import (
     wilson_interval,
 )
 from pg3d.world_model import ActionChunk, ImaginedRollout
+from scripts.build_nominal_path_constraints import (
+    parse_args as parse_builder_args,
+)
 from scripts.eval_constrained_reach import (
     DP3ChunkPolicyAdapter,
     _artifact_selection_summary,
     _build_multichunk_candidates,
+    _constraint_source_summary,
+    _constraints_for_episode,
     _obs_windows_to_torch,
+    _read_episode_indices_file,
     _seed_torch,
 )
 from scripts.eval_constrained_reach import (
@@ -70,6 +79,48 @@ def test_direct_path_avoid_region_clamps_radius_for_short_paths() -> None:
     )
 
     assert constraint.region.radius == pytest.approx(0.045)
+
+
+def test_nominal_path_avoid_region_uses_arc_length_fraction(tmp_path: Path) -> None:
+    tcp_path = np.asarray(
+        [
+            [0.0, 0.0, 0.2],
+            [2.0, 0.0, 0.2],
+            [2.0, 2.0, 0.2],
+        ],
+        dtype=np.float32,
+    )
+
+    constraint = nominal_path_avoid_region(
+        tcp_path,
+        config=NominalPathAvoidConfig(radius=0.03, path_fraction=0.75),
+    )
+
+    np.testing.assert_allclose(constraint.region.center, [2.0, 1.0, 0.2])
+    assert constraint.region.radius == pytest.approx(0.03)
+    assert constraint.name == "nominal_path_avoid_region"
+
+    path = tmp_path / "episode_000.json"
+    save_episode_constraints(path, [constraint])
+    loaded = load_episode_constraints(path)
+
+    assert len(loaded) == 1
+    np.testing.assert_allclose(loaded[0].region.center, [2.0, 1.0, 0.2])
+
+
+def test_nominal_path_avoid_region_validates_inputs() -> None:
+    with pytest.raises(ValueError, match="radius"):
+        nominal_path_avoid_region(
+            [[0.0, 0.0, 0.0]],
+            config=NominalPathAvoidConfig(radius=0.0),
+        )
+    with pytest.raises(ValueError, match="fraction"):
+        nominal_path_avoid_region(
+            [[0.0, 0.0, 0.0]],
+            config=NominalPathAvoidConfig(path_fraction=1.5),
+        )
+    with pytest.raises(ValueError, match=r"\[T, 3\]"):
+        nominal_path_avoid_region([0.0, 0.0, 0.0])
 
 
 def test_wilson_interval_bounds_known_center() -> None:
@@ -323,6 +374,92 @@ def test_eval_artifact_selection_seed_defaults_to_run_seed(tmp_path: Path) -> No
     assert args.artifact_selection == "periodic"
     assert args.artifact_episode_count == 5
     assert args.artifact_selection_seed == 13
+
+
+def test_eval_episode_indices_file_and_precomputed_constraints(tmp_path: Path) -> None:
+    indices_path = tmp_path / "episode_indices.txt"
+    indices_path.write_text("# selected base-success episodes\n3\n7\n", encoding="utf-8")
+    constraints_dir = tmp_path / "constraints"
+    constraint = nominal_path_avoid_region(
+        [[0.0, 0.0, 0.2], [0.2, 0.0, 0.2]],
+        config=NominalPathAvoidConfig(radius=0.03),
+    )
+    save_episode_constraints(constraints_dir / "episode_000.json", [constraint])
+    args = parse_eval_args(
+        [
+            "--checkpoint",
+            str(tmp_path / "policy.pt"),
+            "--dataset",
+            str(tmp_path / "dataset.zarr"),
+            "--output-dir",
+            str(tmp_path / "eval"),
+            "--source",
+            "dataset",
+            "--episode-indices-file",
+            str(indices_path),
+            "--constraints-dir",
+            str(constraints_dir),
+        ]
+    )
+
+    assert _read_episode_indices_file(indices_path) == [3, 7]
+    loaded = _constraints_for_episode(
+        None,
+        spec=RolloutSpec(
+            output_index=0,
+            seed=20003,
+            source="dataset",
+            dataset_episode_index=3,
+        ),
+        crop_config=PointCloudCropConfig(
+            bounds=np.asarray([[-1, 1], [-1, 1], [-1, 1]], dtype=np.float32),
+            num_points=4,
+        ),
+        args=args,
+    )
+
+    assert args.constraints_dir == constraints_dir
+    assert _constraint_source_summary(args)["type"] == "precomputed"
+    np.testing.assert_allclose(loaded[0].region.center, [0.1, 0.0, 0.2])
+
+
+def test_eval_episode_indices_file_requires_dataset_source(tmp_path: Path) -> None:
+    indices_path = tmp_path / "episode_indices.txt"
+    indices_path.write_text("0\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source dataset"):
+        parse_eval_args(
+            [
+                "--checkpoint",
+                str(tmp_path / "policy.pt"),
+                "--dataset",
+                str(tmp_path / "dataset.zarr"),
+                "--output-dir",
+                str(tmp_path / "eval"),
+                "--source",
+                "fresh",
+                "--episode-indices-file",
+                str(indices_path),
+            ]
+        )
+
+
+def test_nominal_path_constraint_builder_defaults(tmp_path: Path) -> None:
+    args = parse_builder_args(
+        [
+            "--checkpoint",
+            str(tmp_path / "policy.pt"),
+            "--dataset",
+            str(tmp_path / "dataset.zarr"),
+            "--output-dir",
+            str(tmp_path / "constraints"),
+        ]
+    )
+
+    assert args.episodes == 25
+    assert args.avoid_radius == pytest.approx(0.03)
+    assert args.path_fraction == pytest.approx(0.5)
+    assert args.min_successes == 15
 
 
 def test_eval_constraint_overlay_flags_parse_and_validate(tmp_path: Path) -> None:
