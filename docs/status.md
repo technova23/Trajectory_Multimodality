@@ -1,6 +1,6 @@
 # pg3d status
 
-Last updated: 2026-05-21
+Last updated: 2026-05-27
 
 ## Current objective
 
@@ -67,6 +67,20 @@ reach candidate is the 20k-step balanced checkpoint at
 `artifacts/reach-datasets/dp3-reach-balanced-1000-checkpoints/step_00020000.pt`, but its first
 25-episode held-out gate selected only 7 base-success episodes, below the 15-episode minimum for
 interpreting constrained reranking.
+The reach dataset writer is headless by default again and now has an explicit `--viewer` mode that
+pumps ManiSkill human-render frames during collection, with optional step delay and post-run hold
+time for live visual inspection.
+The writer now defaults to the balanced workspace task, adds a red start marker beside the existing
+green target marker, and samples planner-validated randomized TCP starts so three-variant setups
+scatter across the table workspace instead of repeating a fixed start.
+The writer now suppresses expected ManiSkill screw-planner retry chatter by default and requires a
+complete requested trajectory-family set per seed/start group before writing those variants, so
+large multimodal datasets no longer silently keep seeds that missed a family such as
+`downward_arc`.
+DP3 reach dataset loading now matches the generated Zarr schema with 1024-point clouds, 9D state,
+7D arm actions, and `target_position`/`goal_pos` goal aliases; normalizer fitting uses a bounded
+deterministic timestep subset by default so large Zarr datasets can begin training without reading
+the full point-cloud tensor into memory.
 
 ## Immediate next steps
 

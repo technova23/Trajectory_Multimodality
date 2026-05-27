@@ -26,6 +26,7 @@ dependencies = [
   "imageio[ffmpeg]>=2.34",
   "trimesh>=4.3",
   "wandb>=0.17",
+  "rerun-sdk==0.22.1",
 ]
 
 [project.optional-dependencies]

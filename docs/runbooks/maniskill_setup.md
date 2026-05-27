@@ -144,14 +144,24 @@ Use the `step` timeline in the Rerun viewer and press play.
 The observation-save Rerun command above writes a single static point-cloud snapshot. The replay
 command writes one `.rrd` per episode with a `step` timeline.
 
-The writer registers pg3d reach tasks lazily, uses the Panda robot with
-`control_mode="pd_joint_pos"`, saves 7D arm-only DP3 action labels, keeps full simulator actions in
-`/data/sim_action`, records one DP3 action chunk of post-success hold-pose rows by default
-(`--hold-steps 8`), and crops point clouds to the default workspace AABB:
+The writer registers pg3d reach tasks lazily, defaults to `PG3DReach-BalancedWorkspace-v0`, uses
+the Panda robot with `control_mode="pd_joint_pos"`, saves 7D arm-only DP3 action labels, keeps full
+simulator actions in `/data/sim_action`, records one DP3 action chunk of post-success hold-pose
+rows by default (`--hold-steps 8`), and crops point clouds to the default workspace AABB:
 
 ```text
 x: [-0.9, 0.7], y: [-0.6, 0.6], z: [0.0, 1.1]
 ```
+
+The writer runs without a human viewer unless `--viewer` is passed. If the viewer opens as a black
+window, make sure the command includes `--viewer`; the script only pumps viewer frames in that
+mode. Add `--viewer-step-delay 0.03` to make live motion visible and `--viewer-hold-seconds 5` to
+keep the window open briefly before cleanup.
+
+Reach demos now show the target with a green marker and the sampled TCP start with a red marker.
+The writer samples Cartesian starts from the selected task bounds by default, rejects starts too
+close to the target, and only accepts starts that the Panda motion planner can reach from reset.
+Pass `--no-randomize-start` to reproduce old fixed-start behavior.
 
 Use `PG3DReach-Workspace-v0` for the diverse pre-constraints policy. Its goal distribution is
 uniform over:

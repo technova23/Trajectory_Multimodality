@@ -4,7 +4,7 @@ import copy
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import torch
@@ -35,6 +35,7 @@ class ReachDatasetConfig:
     max_train_episodes: int | None = None
     goal_marker_points: int = DEFAULT_GOAL_MARKER_POINTS
     goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS
+    normalizer_max_steps: int | None = 4_096
 
     def __post_init__(self) -> None:
         if self.horizon <= 0:
@@ -51,6 +52,8 @@ class ReachDatasetConfig:
             raise ValueError("goal_marker_points must be non-negative")
         if self.goal_marker_radius < 0:
             raise ValueError("goal_marker_radius must be non-negative")
+        if self.normalizer_max_steps is not None and self.normalizer_max_steps <= 0:
+            raise ValueError("normalizer_max_steps must be positive or None")
         object.__setattr__(self, "dataset_path", Path(self.dataset_path))
 
     @property
@@ -85,6 +88,7 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
         self.root = zarr.open_group(str(self.config.dataset_path), mode="r")
         self.metadata = _load_metadata(self.config.dataset_path)
         self.episode_ends = np.asarray(self.root["meta"]["episode_ends"][:], dtype=np.int64)
+        self.target_position_key = _target_position_key(self.root["data"])
         self._validate_arrays()
         episode_mask = self._episode_mask(split)
         self.indices = create_sequence_indices(
@@ -117,21 +121,31 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
         return ReachSequenceDataset(copy.copy(self.config), split="val")
 
     def get_normalizer(self) -> LinearNormalizer:
-        """Fit policy-field normalizers from the full dataset arrays."""
+        """Fit policy-field normalizers from deterministic Zarr rows.
+
+        The generated reach datasets can contain tens of thousands of 1024-point
+        observations. Reading all point clouds only to estimate XYZ statistics is
+        slow and memory-hungry, so large datasets use an evenly spaced subset of
+        timesteps while small smoke datasets remain exact.
+        """
         data = self.root["data"]
-        point_cloud = np.asarray(data["point_cloud"][:], dtype=np.float32)
+        row_indices = normalizer_step_indices(
+            total_steps=int(data["point_cloud"].shape[0]),
+            max_steps=self.config.normalizer_max_steps,
+        )
+        point_cloud = np.asarray(data["point_cloud"].get_orthogonal_selection(row_indices))
         if self.config.goal_marker_points:
             point_cloud = insert_goal_marker_points(
                 point_cloud,
-                np.asarray(data["target_position"][:], dtype=np.float32),
+                np.asarray(data[self.target_position_key].get_orthogonal_selection(row_indices)),
                 num_points=self.config.goal_marker_points,
                 radius=self.config.goal_marker_radius,
             )
         return LinearNormalizer.standardize_from_data(
             {
                 "point_cloud": point_cloud,
-                "agent_pos": np.asarray(data["state"][:], dtype=np.float32),
-                "action": np.asarray(data["action"][:], dtype=np.float32),
+                "agent_pos": np.asarray(data["state"].get_orthogonal_selection(row_indices)),
+                "action": np.asarray(data["action"].get_orthogonal_selection(row_indices)),
             }
         )
 
@@ -166,7 +180,7 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
         data = self.root["data"]
         required = {"point_cloud", "state", "action"}
         if self.config.goal_marker_points:
-            required.add("target_position")
+            required.add(self.target_position_key)
         missing = required.difference(data.keys())
         if missing:
             raise ValueError(f"dataset missing required arrays: {sorted(missing)}")
@@ -190,9 +204,10 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
         if data["action"].ndim != 2:
             raise ValueError("/data/action must have shape [T, action_dim]")
         if self.config.goal_marker_points and (
-            data["target_position"].ndim != 2 or data["target_position"].shape[1] != 3
+            data[self.target_position_key].ndim != 2
+            or data[self.target_position_key].shape[1] != 3
         ):
-            raise ValueError("/data/target_position must have shape [T, 3]")
+            raise ValueError(f"/data/{self.target_position_key} must have shape [T, 3]")
 
     def _episode_mask(self, split: Split) -> np.ndarray:
         if split == "all":
@@ -213,7 +228,12 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
 
     def _sample_sequence(self, idx: int) -> dict[str, np.ndarray]:
         buffer_start, buffer_end, sample_start, sample_end = self.indices[idx]
-        return {
+        keys = (
+            ("point_cloud", "state", "action", self.target_position_key)
+            if self.config.goal_marker_points
+            else ("point_cloud", "state", "action")
+        )
+        sample = {
             key: sample_padded_sequence(
                 self.root["data"][key],
                 buffer_start_idx=int(buffer_start),
@@ -222,12 +242,11 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
                 sample_end_idx=int(sample_end),
                 sequence_length=self.config.horizon,
             )
-            for key in (
-                ("point_cloud", "state", "action", "target_position")
-                if self.config.goal_marker_points
-                else ("point_cloud", "state", "action")
-            )
+            for key in keys
         }
+        if self.config.goal_marker_points and self.target_position_key != "target_position":
+            sample["target_position"] = sample[self.target_position_key]
+        return sample
 
 
 def reach_shape_meta(
@@ -256,6 +275,19 @@ def validation_episode_mask(n_episodes: int, *, val_ratio: float, seed: int) -> 
     rng = np.random.default_rng(seed)
     mask[rng.choice(n_episodes, size=n_val, replace=False)] = True
     return mask
+
+
+def normalizer_step_indices(*, total_steps: int, max_steps: int | None) -> np.ndarray:
+    """Return deterministic row indices for fitting dataset normalizers."""
+    if total_steps < 0:
+        raise ValueError("total_steps must be non-negative")
+    if total_steps == 0:
+        return np.zeros((0,), dtype=np.int64)
+    if max_steps is None or total_steps <= max_steps:
+        return np.arange(total_steps, dtype=np.int64)
+    if max_steps <= 0:
+        raise ValueError("max_steps must be positive or None")
+    return np.unique(np.linspace(0, total_steps - 1, max_steps, dtype=np.int64))
 
 
 def downsample_episode_mask(
@@ -343,3 +375,11 @@ def _load_metadata(dataset_path: Path) -> dict[str, object]:
     if not metadata_path.exists():
         return {}
     return json.loads(metadata_path.read_text(encoding="utf-8"))
+
+
+def _target_position_key(data: Any) -> str:
+    if "target_position" in data:
+        return "target_position"
+    if "goal_pos" in data:
+        return "goal_pos"
+    return "target_position"

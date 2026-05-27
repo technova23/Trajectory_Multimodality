@@ -27,7 +27,8 @@ class PointCloudCropConfig:
     """Fixed-size point-cloud crop policy used by the first reach dataset."""
 
     bounds: Array = field(default_factory=lambda: DEFAULT_WORKSPACE_BOUNDS.copy())
-    num_points: int = 512
+    num_points: int = 1024
+    robot_point_fraction: float = 0.25
 
     def __post_init__(self) -> None:
         bounds = np.asarray(self.bounds, dtype=np.float32)
@@ -37,12 +38,15 @@ class PointCloudCropConfig:
             raise ValueError("each point-cloud bound must have min < max")
         if self.num_points <= 0:
             raise ValueError("num_points must be positive")
+        if not 0.0 <= self.robot_point_fraction <= 1.0:
+            raise ValueError("robot_point_fraction must be between 0 and 1")
         object.__setattr__(self, "bounds", bounds)
 
     def to_json(self) -> dict[str, Any]:
         return {
             "bounds": self.bounds.astype(float).tolist(),
             "num_points": int(self.num_points),
+            "robot_point_fraction": float(self.robot_point_fraction),
         }
 
 
@@ -144,8 +148,12 @@ def crop_point_cloud(
     )
     cropped_indices = np.flatnonzero(in_bounds)
     if cropped_indices.size > config.num_points:
-        selected = np.linspace(0, cropped_indices.size - 1, config.num_points)
-        cropped_indices = cropped_indices[np.rint(selected).astype(np.int64)]
+        cropped_indices = _downsample_with_robot_quota(
+            cropped_indices,
+            robot_mask=source_robot_mask,
+            num_points=config.num_points,
+            robot_point_fraction=config.robot_point_fraction,
+        )
 
     out_points = np.zeros((config.num_points, 3), dtype=np.float32)
     out_robot_mask = np.zeros((config.num_points,), dtype=bool)
@@ -161,6 +169,44 @@ def crop_point_cloud(
         "robot_mask": out_robot_mask,
         "point_valid_mask": out_valid_mask,
     }
+
+
+def _downsample_with_robot_quota(
+    indices: Array,
+    *,
+    robot_mask: Array,
+    num_points: int,
+    robot_point_fraction: float,
+) -> Array:
+    robot_indices = indices[robot_mask[indices]]
+    scene_indices = indices[~robot_mask[indices]]
+    target_robot = min(robot_indices.size, int(np.ceil(num_points * robot_point_fraction)))
+    target_scene = min(scene_indices.size, num_points - target_robot)
+    target_robot = min(robot_indices.size, num_points - target_scene)
+    selected = np.concatenate(
+        [
+            _linspace_select(robot_indices, target_robot),
+            _linspace_select(scene_indices, target_scene),
+        ],
+        axis=0,
+    )
+    if selected.size < num_points:
+        remaining = np.setdiff1d(indices, selected, assume_unique=True)
+        selected = np.concatenate(
+            [selected, _linspace_select(remaining, num_points - selected.size)],
+            axis=0,
+        )
+    return np.sort(selected.astype(np.int64, copy=False))
+
+
+def _linspace_select(values: Array, count: int) -> Array:
+    values = np.asarray(values, dtype=np.int64)
+    if count <= 0 or values.size == 0:
+        return np.zeros((0,), dtype=np.int64)
+    if values.size <= count:
+        return values.astype(np.int64, copy=True)
+    selected = np.linspace(0, values.size - 1, count)
+    return values[np.rint(selected).astype(np.int64)]
 
 
 def observation_to_dataset_row(

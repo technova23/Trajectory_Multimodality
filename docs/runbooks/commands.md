@@ -113,7 +113,31 @@ Generate a small reach dataset:
 uv run python scripts/write_maniskill_reach_dataset.py \
   --num-demos 5 \
   --hold-steps 8 \
-  --output artifacts/pg3d_reach_narrow.zarr \
+  --trajectory-variants-per-reset 3 \
+  --output artifacts/pg3d_reach_balanced.zarr \
+  --overwrite
+```
+
+By default the writer uses `PG3DReach-BalancedWorkspace-v0` and planner-validated randomized TCP
+starts. Each random start/goal setup tries `--trajectory-variants-per-reset` trajectory families
+before moving to the next seed. Incomplete seed/start groups are skipped by default, so datasets do
+not silently miss one requested family such as `downward_arc`. Use
+`--allow-partial-variant-sets` only for debugging or old compatibility runs, and use
+`--show-planner-output` only when diagnosing ManiSkill planner internals because expected failed
+dry-run retries can print many `screw plan failed` lines.
+
+The dataset writer is headless by default. To watch collection live in the ManiSkill viewer, add
+`--viewer`; use `--viewer-step-delay` to slow the loop and `--viewer-hold-seconds` to keep the
+window open briefly after collection:
+
+```bash
+uv run python scripts/write_maniskill_reach_dataset.py \
+  --num-demos 1 \
+  --max-attempts 3 \
+  --viewer \
+  --viewer-step-delay 0.03 \
+  --viewer-hold-seconds 5 \
+  --output artifacts/pg3d_reach_viewer_smoke.zarr \
   --overwrite
 ```
 
@@ -412,7 +436,10 @@ The trainer defaults to `pad_after=n_action_steps-1`, cosine LR with warmup, Ada
 `betas=(0.95, 0.999)`, gradient clipping, EMA checkpoint state, and W&B validation/action-error
 metrics. P11 training also defaults to `--goal-marker-points 16 --goal-marker-radius 0.015`,
 which overwrites the final K policy-visible point slots with ordered target markers. Pass
-`--goal-marker-points 0` only for old-checkpoint compatibility or ablations. The trainer writes
+`--goal-marker-points 0` only for old-checkpoint compatibility or ablations. DP3 normalizers are
+fit from up to `--normalizer-max-steps 4096` evenly spaced Zarr timesteps by default, which keeps
+startup reasonable for 1024-point datasets; pass `--normalizer-max-steps 0` for exact full-dataset
+normalizer stats. The trainer writes
 periodic `step_XXXXXXXX.pt` checkpoints and a final
 `final_step_XXXXXXXX.pt` checkpoint under `--checkpoint-dir`. When W&B is active,
 it attempts to log checkpoint-time rollout MP4s. Pass `--checkpoint-rollout-dataset "$VAL_DATASET"`
@@ -466,6 +493,7 @@ uv run python scripts/train_dp3_reach.py \
   --max-val-batches 8 \
   --goal-marker-points 16 \
   --goal-marker-radius 0.015 \
+  --normalizer-max-steps 4096 \
   --lr 1e-4 \
   --warmup-steps 1000 \
   --grad-clip-norm 1.0 \

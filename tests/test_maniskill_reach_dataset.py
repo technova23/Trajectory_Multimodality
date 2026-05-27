@@ -70,6 +70,22 @@ def test_crop_point_cloud_downsamples_deterministically() -> None:
     )
 
 
+def test_crop_point_cloud_downsamples_with_robot_quota() -> None:
+    config = PointCloudCropConfig(
+        bounds=np.asarray([[-1, 2], [-1, 1], [0, 1]], dtype=np.float32),
+        num_points=8,
+        robot_point_fraction=0.5,
+    )
+    points = np.asarray([[idx * 0.1, 0.0, 0.5] for idx in range(12)], dtype=np.float32)
+    robot_mask = np.asarray([True, True, True, True] + [False] * 8)
+
+    cropped = crop_point_cloud(points, robot_mask=robot_mask, config=config)
+
+    assert cropped["point_cloud"].shape == (8, 3)
+    assert int(cropped["robot_mask"].sum()) == 4
+    assert cropped["point_valid_mask"].tolist() == [True] * 8
+
+
 def test_action_label_conversion_supports_abs_and_delta() -> None:
     sim_action = np.asarray([1, 2, 3, 4, 5, 6, 7, 0.04], dtype=np.float32)
     state = np.asarray([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 0.04, 0.04], dtype=np.float32)

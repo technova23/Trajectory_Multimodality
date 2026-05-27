@@ -70,6 +70,15 @@ class PG3DReachEnv(BaseEnv):
             add_collision=False,
             initial_pose=sapien.Pose(),
         )
+        self.start_site = actors.build_sphere(
+            self.scene,
+            radius=self.goal_thresh,
+            color=[1.0, 0.0, 0.0, 1.0],
+            name="start_site",
+            body_type="kinematic",
+            add_collision=False,
+            initial_pose=sapien.Pose(),
+        )
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict[str, Any]) -> None:
         with torch.device(self.device):
@@ -102,6 +111,7 @@ class PG3DReachEnv(BaseEnv):
                 half_extents = torch.tensor(self.goal_half_extents, dtype=torch.float32)
                 goal_xyz = center + (torch.rand((batch_size, 3)) * 2.0 - 1.0) * half_extents
             self.goal_site.set_pose(Pose.create_from_pq(goal_xyz))
+            self.start_site.set_pose(Pose.create_from_pq(self.agent.tcp_pose.p))
 
     def _get_obs_extra(self, info: dict[str, Any]) -> dict[str, Any]:
         return {

@@ -17,6 +17,7 @@ from pg3d.policies.dp3.reach_dataset import (
     ReachDatasetConfig,
     ReachSequenceDataset,
     create_sequence_indices,
+    normalizer_step_indices,
     reach_shape_meta,
     validation_episode_mask,
 )
@@ -171,6 +172,28 @@ def test_reach_dataset_normalizer_supports_dp3_loss(tmp_path) -> None:
 
     assert torch.isfinite(loss)
     assert loss_dict["bc_loss"] >= 0.0
+
+
+def test_reach_dataset_normalizer_uses_bounded_rows(tmp_path) -> None:
+    dataset_path = _write_reach_dataset(tmp_path, num_episodes=2, episode_length=5)
+    dataset = ReachSequenceDataset(
+        ReachDatasetConfig(
+            dataset_path=dataset_path,
+            horizon=4,
+            n_obs_steps=2,
+            goal_marker_points=0,
+            normalizer_max_steps=3,
+        ),
+        split="train",
+    )
+
+    normalizer = dataset.get_normalizer()
+
+    assert normalizer["action"].scale.shape == (7,)
+    np.testing.assert_array_equal(
+        normalizer_step_indices(total_steps=10, max_steps=3),
+        np.asarray([0, 4, 9], dtype=np.int64),
+    )
 
 
 def test_reach_dataset_imports_keep_simulator_and_external_dp3_lazy() -> None:

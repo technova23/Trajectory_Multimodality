@@ -40,6 +40,60 @@ def test_collect_episode_appends_hold_chunk_after_success(monkeypatch) -> None:
     np.testing.assert_allclose(episode.sim_action[2:, 7], 0.04)
 
 
+def test_writer_is_headless_by_default_and_viewer_is_explicit() -> None:
+    headless_args = writer.parse_args([])
+    viewer_args = writer.parse_args(["--viewer", "--viewer-step-delay", "0.01"])
+
+    assert headless_args.env_id == "PG3DReach-BalancedWorkspace-v0"
+    assert headless_args.randomize_start is True
+    assert headless_args.allow_partial_variant_sets is False
+    assert headless_args.show_planner_output is False
+    assert writer._env_kwargs(headless_args)["render_mode"] is None
+    assert writer._env_kwargs(viewer_args)["render_mode"] == "human"
+    assert viewer_args.viewer_step_delay == 0.01
+
+
+def test_complete_variant_set_requires_each_requested_family() -> None:
+    complete = [
+        {"trajectory_type": 0},
+        {"trajectory_type": 1},
+        {"trajectory_type": 2},
+        {"trajectory_type": 3},
+    ]
+    partial = [
+        {"trajectory_type": 0},
+        {"trajectory_type": 1},
+        {"trajectory_type": 2},
+    ]
+
+    assert writer._has_complete_variant_set(complete, variants_per_reset=4)
+    assert not writer._has_complete_variant_set(partial, variants_per_reset=4)
+
+
+def test_screw_planner_output_is_suppressed_by_default(capsys) -> None:
+    planner = _NoisyFailingPlanner()
+
+    plan = writer._move_to_pose_with_screw(
+        planner,
+        _FakePose(),
+        suppress_output=True,
+    )
+
+    captured = capsys.readouterr()
+    assert plan == -1
+    assert "screw plan failed" not in captured.out
+    assert "screw stderr failed" not in captured.err
+
+
+def test_start_workspace_bounds_default_to_selected_task() -> None:
+    bounds = writer._start_workspace_bounds("PG3DReach-BalancedWorkspace-v0", None)
+
+    np.testing.assert_allclose(
+        bounds,
+        np.asarray([[-0.26, 0.34], [-0.30, 0.30], [0.20, 0.68]], dtype=np.float32),
+    )
+
+
 def test_dataset_stats_reports_hold_coverage() -> None:
     episode = writer.ReachEpisodeData(
         state=np.zeros((2, 9), dtype=np.float32),
@@ -121,6 +175,13 @@ class _FakePlanner:
 
     def close(self) -> None:
         pass
+
+
+class _NoisyFailingPlanner:
+    def move_to_pose_with_screw(self, goal_pose, *, dry_run: bool):
+        print("screw plan failed")
+        print("screw stderr failed", file=writer.sys.stderr)
+        return -1
 
 
 class _FakeReachEnv:

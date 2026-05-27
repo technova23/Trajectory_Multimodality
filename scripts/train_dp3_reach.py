@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
             max_train_episodes=args.max_train_episodes,
             goal_marker_points=args.goal_marker_points,
             goal_marker_radius=args.goal_marker_radius,
+            normalizer_max_steps=args.normalizer_max_steps,
         ),
         split="train",
     )
@@ -274,6 +275,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-train-episodes", type=int, default=None)
     parser.add_argument("--goal-marker-points", type=int, default=DEFAULT_GOAL_MARKER_POINTS)
     parser.add_argument("--goal-marker-radius", type=float, default=DEFAULT_GOAL_MARKER_RADIUS)
+    parser.add_argument(
+        "--normalizer-max-steps",
+        type=int,
+        default=4096,
+        help=(
+            "maximum evenly spaced Zarr timesteps used to fit DP3 normalizers; set to 0 "
+            "to use all timesteps"
+        ),
+    )
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--adam-beta1", type=float, default=0.95)
     parser.add_argument("--adam-beta2", type=float, default=0.999)
@@ -333,6 +343,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         raise ValueError("--goal-marker-points must be non-negative")
     if args.goal_marker_radius < 0:
         raise ValueError("--goal-marker-radius must be non-negative")
+    if args.normalizer_max_steps < 0:
+        raise ValueError("--normalizer-max-steps must be non-negative")
+    if args.normalizer_max_steps == 0:
+        args.normalizer_max_steps = None
     if args.loss_window <= 0:
         raise ValueError("--loss-window must be positive")
     if args.histogram_every <= 0:
@@ -591,8 +605,8 @@ def _log_checkpoint_rollouts(
 ) -> None:
     import gymnasium as gym
     import mani_skill.envs  # noqa: F401
-
     import wandb
+
     from pg3d.envs.maniskill_adapter import register_pg3d_reach_envs
     from scripts.rollout_dp3_reach_policy import (
         _action_mode,
