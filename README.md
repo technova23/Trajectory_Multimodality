@@ -14,6 +14,259 @@ The reach-first MVP is:
 
 The full source-of-truth research plan is `docs/project_proposal.html`.
 
+## Focused Guide: Coding Agents Steer Policy
+
+This repo is currently centered on a reach-task pipeline:
+
+```text
+ManiSkill PG3DReach env
+  -> multimodal demonstration writer
+  -> Zarr point-cloud/action dataset
+  -> pg3d-native DP3 policy training
+  -> stochastic candidate rollout / constrained visualization
+  -> deterministic geometry world-model tree
+```
+
+The important idea is that the policy is learned, but the world model used for
+imagined rollout is not learned. It is geometry-based: static scene points stay
+fixed, robot points are removed from the current point cloud, future robot
+geometry is rendered from imagined joint states, and the future point cloud is
+composed as static scene plus future robot cloud.
+
+### Files We Touch Most
+
+- `scripts/write_maniskill_reach_dataset.py`
+  Generates multimodal reach demonstrations with ManiSkill motion planning and
+  writes the DP3-compatible Zarr dataset.
+
+- `pg3d/envs/maniskill_adapter/dataset.py`
+  Defines the Zarr schema, point-cloud crop/pad logic, action labels, and
+  metadata writing.
+
+- `pg3d/envs/maniskill_adapter/types.py`
+  Defines the clean observation boundary: point cloud, robot mask, robot state,
+  TCP pose, and simulator ground truth.
+
+- `pg3d/envs/maniskill_adapter/reach_env.py`
+  Defines `PG3DReach-*` ManiSkill environments and goal sampling.
+
+- `pg3d/policies/dp3/policy.py`
+  Contains `SimpleDP3`, the pg3d-native DP3 policy core.
+
+- `pg3d/policies/dp3/modules.py`
+  Contains the PointNet-style encoder, diffusion U-Net modules, FiLM/cross
+  attention conditioning, and EMA helper.
+
+- `scripts/train_dp3_reach.py`
+  Trains the pg3d-native DP3 policy from the reach Zarr dataset and writes
+  `.pt` checkpoints.
+
+- `scripts/rollout_dp3_reach_policy.py`
+  Executes a trained pg3d-native checkpoint in ManiSkill and writes MP4, Rerun,
+  JSON, and metrics artifacts.
+
+- `scripts/visualize_constrained_candidates_rerun.py`
+  Samples many natural stochastic DP3 rollouts, clusters/visualizes candidate
+  TCP trajectories, and overlays an avoid sphere.
+
+- `scripts/visualize_constrained_candidates_external_dp3_rerun.py`
+  Wrapper for external 3D-Diffusion-Policy `.ckpt` checkpoints. It loads the
+  upstream `TrainDP3Workspace` checkpoint and delegates to the local constrained
+  candidate visualizer.
+
+- `pg3d/world_model/`
+  The deterministic geometry world model: action chunks, joint interpretation,
+  static-scene compositing, and imagined rollout types.
+
+- `pg3d/envs/maniskill_adapter/geometry.py`
+  `ManiSkillGhostPandaGeometryProvider`, which uses a second ManiSkill env to
+  render robot-segmented point clouds at imagined Panda joint states.
+
+- `scripts/trajectory_tree_world_model.py`
+  Builds a recursive DP3 candidate tree with the geometry world model. It does
+  not train any new model and does not execute the sampled candidate actions in
+  the real env.
+
+### Dataset Timing
+
+The reach dataset stores one row per ManiSkill control step. For the current
+PG3DReach/Panda setup:
+
+```text
+control_freq = 20 Hz
+control_timestep = 0.05 s
+sim_freq = 100 Hz
+sim_timestep = 0.01 s
+```
+
+So each Zarr row is one point-cloud frame and one action label every `0.05 s`.
+Each `env.step(action)` advances five physics substeps. The row stores the
+observation at the start of the control step and the action applied during the
+following control step.
+
+### Zarr Schema
+
+The dataset writer saves arrays under `/data`:
+
+```text
+state             [T, 9]       Panda qpos / DP3 low-dimensional state
+action            [T, 7]       DP3 arm action label
+sim_action        [T, A]       full simulator action, usually arm + gripper
+point_cloud       [T, N, 3]    cropped/padded XYZ point cloud
+robot_mask        [T, N]       robot segmentation mask aligned to point_cloud
+point_valid_mask  [T, N]       valid crop slots; false entries are padding
+target_position   [T, 3]       goal position
+tcp_pose          [T, 7]       end-effector pose
+success           [T]          success flag
+```
+
+Episode boundaries live in `/meta/episode_ends`. Human-readable metadata lives
+in `metadata.json`.
+
+Action labels are:
+
+```text
+abs_joint:   action = sim_action[:7]
+delta_joint: action = sim_action[:7] - state[:7]
+```
+
+### Trajectory Families
+
+The dataset writer creates multimodal demonstrations by choosing waypoint
+families. For start `s`, goal `g`, and `d = g - s`, each waypoint is formed as:
+
+```text
+w = s + r(g - s) + alpha * lateral_axis + beta * vertical_axis + noise
+```
+
+where:
+
+```text
+lateral_axis = normalized perpendicular to XY projection of (g - s)
+vertical_axis = [0, 0, 1]  # global Z
+```
+
+Family names such as `left_wide`, `right_wide`, `upper_arc`, `lower_arc`,
+`shallow_direct`, and `extreme_detour` control the signs and magnitudes of
+`alpha` and `beta`. Family metadata is used for generation/diagnostics and is
+stripped before training so DP3 must infer modes from observations.
+
+### Training Defaults
+
+The current training path uses:
+
+```text
+horizon = 16
+n_obs_steps = 2
+n_action_steps = 8
+condition_type = cross_attention
+prediction_type = epsilon
+num_train_timesteps = 350
+down_dims = [512, 1024, 2048]
+diffusion_step_embed_dim = 256
+loss = Huber(delta=1.0)
+```
+
+DP3 predicts a horizon of 16 actions but uses receding-horizon execution: by
+default only the next 8 actions are applied before replanning.
+
+### Common Commands
+
+Generate a multimodal dataset:
+
+```bash
+UV_CACHE_DIR=/tmp/pg3d-uv-cache uv run python scripts/write_maniskill_reach_dataset.py \
+  --env-id PG3DReach-BalancedWorkspace-v0 \
+  --num-demos 4800 \
+  --trajectory-variants-per-reset 12 \
+  --num-points 1024 \
+  --output dataset_generation/artifacts/debug_multimodal_test.zarr \
+  --overwrite
+```
+
+Train pg3d-native DP3:
+
+```bash
+UV_CACHE_DIR=/tmp/pg3d-uv-cache uv run python scripts/train_dp3_reach.py \
+  --dataset dataset_generation/artifacts/debug_multimodal_test.zarr \
+  --device cuda \
+  --max-steps 100000 \
+  --batch-size 64 \
+  --val-ratio 0.1 \
+  --checkpoint-dir artifacts/checkpoints/dp3_reach_cross_attention_huber \
+  --checkpoint-every 5000 \
+  --condition-type cross_attention \
+  --encoder-output-dim 128 \
+  --diffusion-step-embed-dim 256 \
+  --down-dims 512 1024 2048 \
+  --num-train-timesteps 350 \
+  --num-inference-steps 350 \
+  --prediction-type epsilon
+```
+
+Visualize many stochastic constrained candidates from a pg3d-native checkpoint:
+
+```bash
+UV_CACHE_DIR=/tmp/pg3d-uv-cache uv run python scripts/visualize_constrained_candidates_rerun.py \
+  --dataset dataset_generation/artifacts/debug_multimodal_test.zarr \
+  --checkpoint artifacts/checkpoints/dp3_reach_cross_attention_huber/final_step_00010000.pt \
+  --checkpoint-model ema \
+  --device cuda \
+  --episode-index 0 \
+  --candidates 100 \
+  --steps 80 \
+  --avoid-radius 0.08 \
+  --avoid-min-radius 0.08 \
+  --output artifacts/constrained_candidates/candidates.rrd \
+  --video artifacts/constrained_candidates/candidates.mp4
+```
+
+Visualize an external 3D-Diffusion-Policy `.ckpt` checkpoint:
+
+```bash
+UV_CACHE_DIR=/tmp/pg3d-uv-cache uv run python scripts/visualize_constrained_candidates_external_dp3_rerun.py \
+  --external-dp3-repo /home/skills/gnrs/3D-Diffusion-Policy/3D-Diffusion-Policy \
+  --dataset dataset_generation/artifacts/debug_multimodal_test.zarr \
+  --checkpoint /path/to/external/checkpoints/epoch=0040-test_mean_score=-0.000.ckpt \
+  --checkpoint-model ema \
+  --device cuda \
+  --episode-index 0 \
+  --candidates 100 \
+  --steps 80 \
+  --avoid-radius 0.08 \
+  --avoid-min-radius 0.08 \
+  --output artifacts/constrained_candidates_external_dp3/candidates.rrd \
+  --video artifacts/constrained_candidates_external_dp3/candidates.mp4
+```
+
+Build a geometry world-model trajectory tree:
+
+```bash
+UV_CACHE_DIR=/tmp/pg3d-uv-cache uv run python scripts/trajectory_tree_world_model.py \
+  --dataset dataset_generation/artifacts/debug_multimodal_test.zarr \
+  --checkpoint artifacts/checkpoints/dp3_reach_cross_attention_huber/final_step_00010000.pt \
+  --checkpoint-model ema \
+  --device cuda \
+  --episode-index 0 \
+  --root-candidates 32 \
+  --branching-factor 16 \
+  --tree-depth 3 \
+  --replan-step 8 \
+  --hz 16 \
+  --output artifacts/trajectory_tree_world_model/trajectory_tree.rrd \
+  --video artifacts/trajectory_tree_world_model/trajectory_tree.mp4
+```
+
+For a quick smoke test, use:
+
+```bash
+--root-candidates 2 --branching-factor 2 --tree-depth 2
+```
+
+The tree script also writes `trajectory_tree.json` next to the `.rrd`, including
+node ids, parent-child links, action sequences, predicted joint trajectories,
+and predicted end-effector trajectories.
+
 ## Current Status
 
 - Package name: `pg3d`.
