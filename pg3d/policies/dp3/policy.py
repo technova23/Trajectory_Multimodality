@@ -58,13 +58,15 @@ class SimpleDP3(BasePolicy):
         n_action_steps: int = 8,
         n_obs_steps: int = 2,
         num_inference_steps: int | None = None,
+        num_train_timesteps: int = 350,
+        prediction_type: str = "epsilon",
         obs_as_global_cond: bool = True,
-        diffusion_step_embed_dim: int = 128,
-        down_dims: Sequence[int] = (128, 256, 384),
+        diffusion_step_embed_dim: int = 256,
+        down_dims: Sequence[int] = (512, 1024, 2048),
         kernel_size: int = 5,
         n_groups: int = 8,
-        condition_type: str = "film",
-        encoder_output_dim: int = 64,
+        condition_type: str = "cross_attention",
+        encoder_output_dim: int = 128,
         use_pc_color: bool = False,
         pointcloud_encoder_cfg: Mapping[str, object] | None = None,
         goal_marker_points: int = 0,
@@ -107,7 +109,13 @@ class SimpleDP3(BasePolicy):
         )
         self.obs_feature_dim = self.obs_encoder.output_shape()
         input_dim = self.action_dim
-        global_cond_dim = self.obs_feature_dim * n_obs_steps if obs_as_global_cond else None
+        global_cond_dim = None
+        if obs_as_global_cond:
+            global_cond_dim = (
+                self.obs_feature_dim
+                if "cross_attention" in condition_type
+                else self.obs_feature_dim * n_obs_steps
+            )
         if not obs_as_global_cond:
             input_dim = self.action_dim + self.obs_feature_dim
 
@@ -121,14 +129,14 @@ class SimpleDP3(BasePolicy):
             condition_type=condition_type,
         )
         self.noise_scheduler = noise_scheduler or DDIMScheduler(
-            num_train_timesteps=100,
+            num_train_timesteps=num_train_timesteps,
             beta_start=0.0001,
-            beta_end=0.02,
-            beta_schedule="squaredcos_cap_v2",
+            beta_end=0.05,
+            beta_schedule="scaled_linear",
             clip_sample=True,
             set_alpha_to_one=True,
             steps_offset=0,
-            prediction_type="sample",
+            prediction_type=prediction_type,
         )
         self.noise_scheduler_pc = copy.deepcopy(self.noise_scheduler)
         self.mask_generator = LowdimMaskGenerator(
@@ -198,7 +206,10 @@ class SimpleDP3(BasePolicy):
                 lambda x: x[:, :obs_steps, ...].reshape(-1, *x.shape[2:]),
             )
             nobs_features = self.obs_encoder(this_nobs)
-            global_cond = nobs_features.reshape(batch_size, -1)
+            if "cross_attention" in self.condition_type:
+                global_cond = nobs_features.reshape(batch_size, obs_steps, -1)
+            else:
+                global_cond = nobs_features.reshape(batch_size, -1)
             cond_data = torch.zeros(
                 size=(batch_size, horizon, action_dim),
                 device=device,
@@ -252,7 +263,10 @@ class SimpleDP3(BasePolicy):
                 lambda x: x[:, : self.n_obs_steps, ...].reshape(-1, *x.shape[2:]),
             )
             nobs_features = self.obs_encoder(this_nobs)
-            global_cond = nobs_features.reshape(batch_size, -1)
+            if "cross_attention" in self.condition_type:
+                global_cond = nobs_features.reshape(batch_size, self.n_obs_steps, -1)
+            else:
+                global_cond = nobs_features.reshape(batch_size, -1)
         else:
             this_nobs = dict_apply(nobs, lambda x: x[:, :horizon, ...].reshape(-1, *x.shape[2:]))
             nobs_features = self.obs_encoder(this_nobs).reshape(batch_size, horizon, -1)
@@ -286,7 +300,7 @@ class SimpleDP3(BasePolicy):
         else:
             raise ValueError(f"Unsupported prediction_type {pred_type!r}")
 
-        loss = F.mse_loss(pred, target, reduction="none")
+        loss = F.huber_loss(pred, target, reduction="none", delta=1.0)
         loss = loss * loss_mask.type(loss.dtype)
         loss = loss.reshape(loss.shape[0], -1).mean(dim=1).mean()
         return loss, {"bc_loss": float(loss.detach().cpu())}

@@ -169,6 +169,7 @@ def main(argv: list[str] | None = None) -> int:
                 run,
                 metrics,
                 batch=batch,
+                policy=policy,
                 step=step,
                 log_histograms=args.log_histograms and step % args.histogram_every == 0,
             )
@@ -296,10 +297,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--loss-window", type=int, default=100)
     parser.add_argument("--use-ema", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--ema-max-value", type=float, default=0.9999)
-    parser.add_argument("--num-inference-steps", type=int, default=10)
-    parser.add_argument("--encoder-output-dim", type=int, default=64)
-    parser.add_argument("--diffusion-step-embed-dim", type=int, default=128)
-    parser.add_argument("--down-dims", type=int, nargs="+", default=[128, 256, 384])
+    parser.add_argument("--num-train-timesteps", type=int, default=350)
+    parser.add_argument("--num-inference-steps", type=int, default=350)
+    parser.add_argument("--prediction-type", choices=["epsilon", "sample"], default="epsilon")
+    parser.add_argument("--encoder-output-dim", type=int, default=128)
+    parser.add_argument(
+        "--condition-type",
+        choices=["film", "cross_attention", "cross_attention_add"],
+        default="cross_attention",
+    )
+    parser.add_argument("--diffusion-step-embed-dim", type=int, default=256)
+    parser.add_argument("--down-dims", type=int, nargs="+", default=[512, 1024, 2048])
     parser.add_argument("--kernel-size", type=int, default=5)
     parser.add_argument("--n-groups", type=int, default=8)
     parser.add_argument(
@@ -349,6 +357,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         args.normalizer_max_steps = None
     if args.loss_window <= 0:
         raise ValueError("--loss-window must be positive")
+    if args.num_train_timesteps <= 0:
+        raise ValueError("--num-train-timesteps must be positive")
+    if args.num_inference_steps <= 0:
+        raise ValueError("--num-inference-steps must be positive")
     if args.histogram_every <= 0:
         raise ValueError("--histogram-every must be positive")
     if args.checkpoint_every < 0:
@@ -381,8 +393,11 @@ def _policy_kwargs(
         "horizon": args.horizon,
         "n_obs_steps": args.n_obs_steps,
         "n_action_steps": args.n_action_steps,
+        "num_train_timesteps": args.num_train_timesteps,
         "num_inference_steps": args.num_inference_steps,
+        "prediction_type": args.prediction_type,
         "encoder_output_dim": args.encoder_output_dim,
+        "condition_type": args.condition_type,
         "diffusion_step_embed_dim": args.diffusion_step_embed_dim,
         "down_dims": tuple(args.down_dims),
         "kernel_size": args.kernel_size,
@@ -535,15 +550,30 @@ def _wandb_log(
     metrics: dict[str, float],
     *,
     batch: Any,
+    policy: SimpleDP3,
     step: int,
     log_histograms: bool,
 ) -> None:
     if log_histograms:
         import wandb
 
+        was_training = policy.training
+        policy.eval()
+        with torch.no_grad():
+            output = policy.predict_action(batch["obs"])
+        if was_training:
+            policy.train()
+
+        output_action = output["action"].detach().cpu()
+        output_action_pred = output["action_pred"].detach().cpu()
+        target_action = batch["action"].detach().cpu()
         metrics = {
             **metrics,
-            "viz/action_hist": wandb.Histogram(batch["action"].detach().cpu().numpy()),
+            "viz/action_hist": wandb.Histogram(target_action.numpy()),
+            "viz/output_action_chunk_hist": wandb.Histogram(output_action.numpy()),
+            "viz/output_action_pred_full_hist": wandb.Histogram(output_action_pred.numpy()),
+            "viz/output_action_chunk_std": float(output_action.std(unbiased=False)),
+            "viz/output_action_chunk_rms": float(output_action.pow(2).mean().sqrt()),
             "viz/agent_pos_hist": wandb.Histogram(
                 batch["obs"]["agent_pos"].detach().cpu().numpy()
             ),

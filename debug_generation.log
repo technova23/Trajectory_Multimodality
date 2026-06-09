@@ -1,0 +1,552 @@
+generation config: num_demos=30 max_attempts=500 seed_start=2109436230 variants_per_reset=12 waypoint_attempts=30
+trajectory families: 0:left_wide, 1:right_wide, 2:upper_left, 3:upper_right, 4:lower_left, 5:lower_right, 6:upper_arc, 7:lower_arc, 8:high_loop, 9:low_loop, 10:shallow_direct, 11:extreme_detour
+[33;1m2026-05-29 08:29:44,586 - mani_skill  - WARNING - Requested to use render device "sapien_cuda", but CUDA device was not found. Falling back to "cpu" device. Rendering might be disabled.[0m
+[seed 2109436230] reset 1/500; collected=0/30
+[seed 2109436230] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436230] goal=[0.2993169128894806, 0.4215887486934662, 0.344473659992218] checking workspace/base/table feasibility
+[seed 2109436230] start accepted after attempt=1 tcp=[0.11957327276468277, -0.0634346753358841, 0.3017744719982147] goal_orientation=start_tcp_orientation
+[seed 2109436230] goal reachable from start: status=Success
+[seed 2109436230] family 0:left_wide search started (30 candidates)
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=1 workspace_bounds_fail=6 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=2 workspace_bounds_fail=10 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=3 workspace_bounds_fail=15 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436230] family 0:left_wide attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=20 workspace_bounds_fail=94 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436230] family 0:left_wide attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436230] family 0:left_wide attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436230] family 0:left_wide failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436230] family 1:right_wide search started (30 candidates)
+[seed 2109436230] family 1:right_wide attempt 10/30: geometry_ok=10 planner_ok=7 planner_fail=3 quality_ok=0 resampled_long=0 raw_too_long=7 last_raw_steps=4695 max_raw=1110
+[seed 2109436230] family 1:right_wide attempt 20/30: geometry_ok=20 planner_ok=14 planner_fail=6 quality_ok=0 resampled_long=0 raw_too_long=14
+[seed 2109436230] family 1:right_wide attempt 30/30: geometry_ok=30 planner_ok=23 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=23 last_raw_steps=4651 max_raw=1110
+[seed 2109436230] family 1:right_wide failed after 30 candidates (geometry_ok=30, planner_ok=23, quality_ok=0, resampled_long=0, raw_too_long=23)
+[seed 2109436230] family 2:upper_left search started (30 candidates)
+[seed 2109436230] family 2:upper_left attempt 10/30: geometry_ok=10 planner_ok=2 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=2 last_raw_steps=16401 max_raw=1110
+[seed 2109436230] family 2:upper_left attempt 20/30: geometry_ok=20 planner_ok=5 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436230] family 2:upper_left attempt 30/30: geometry_ok=30 planner_ok=11 planner_fail=19 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436230] family 2:upper_left failed after 30 candidates (geometry_ok=30, planner_ok=11, quality_ok=0, resampled_long=0, raw_too_long=11)
+[seed 2109436230] family 3:upper_right search started (30 candidates)
+[seed 2109436230] family 3:upper_right attempt 10/30: geometry_ok=10 planner_ok=6 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=6 last_raw_steps=5481 max_raw=1110
+[seed 2109436230] family 3:upper_right attempt 20/30: geometry_ok=20 planner_ok=8 planner_fail=12 quality_ok=0 resampled_long=0 raw_too_long=8
+[seed 2109436230] family 3:upper_right attempt 30/30: geometry_ok=30 planner_ok=11 planner_fail=19 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436230] family 3:upper_right failed after 30 candidates (geometry_ok=30, planner_ok=11, quality_ok=0, resampled_long=0, raw_too_long=11)
+[seed 2109436230] family 4:lower_left search started (30 candidates)
+[seed 2109436230] family 4:lower_left attempt 10/30: geometry_ok=10 planner_ok=1 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=1
+[seed 2109436230] family 4:lower_left attempt 20/30: geometry_ok=20 planner_ok=1 planner_fail=19 quality_ok=0 resampled_long=0 raw_too_long=1
+[seed 2109436230] family 4:lower_left attempt 30/30: geometry_ok=30 planner_ok=2 planner_fail=28 quality_ok=0 resampled_long=0 raw_too_long=2
+[seed 2109436230] family 4:lower_left failed after 30 candidates (geometry_ok=30, planner_ok=2, quality_ok=0, resampled_long=0, raw_too_long=2)
+[seed 2109436230] family 5:lower_right search started (30 candidates)
+[seed 2109436230] family 5:lower_right attempt 10/30: geometry_ok=10 planner_ok=3 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=3 last_raw_steps=5474 max_raw=1110
+[seed 2109436230] family 5:lower_right attempt 20/30: geometry_ok=20 planner_ok=8 planner_fail=12 quality_ok=0 resampled_long=0 raw_too_long=8 last_raw_steps=4717 max_raw=1110
+[seed 2109436230] family 5:lower_right attempt 30/30: geometry_ok=30 planner_ok=15 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=5053 max_raw=1110
+[seed 2109436230] family 5:lower_right failed after 30 candidates (geometry_ok=30, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436230] family 6:upper_arc search started (30 candidates)
+[seed 2109436230] family 6:upper_arc attempt 10/30: geometry_ok=10 planner_ok=1 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=1
+[seed 2109436230] family 6:upper_arc attempt 20/30: geometry_ok=20 planner_ok=3 planner_fail=17 quality_ok=0 resampled_long=0 raw_too_long=3
+[seed 2109436230] family 6:upper_arc attempt 30/30: geometry_ok=30 planner_ok=6 planner_fail=24 quality_ok=0 resampled_long=0 raw_too_long=6 last_raw_steps=7013 max_raw=1110
+[seed 2109436230] family 6:upper_arc failed after 30 candidates (geometry_ok=30, planner_ok=6, quality_ok=0, resampled_long=0, raw_too_long=6)
+[seed 2109436230] family 7:lower_arc search started (30 candidates)
+[waypoint diagnostics] family 7:lower_arc: candidate_rejects=1 workspace_bounds_fail=4 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436230] family 7:lower_arc attempt 10/30: geometry_ok=9 planner_ok=6 planner_fail=3 quality_ok=0 resampled_long=0 raw_too_long=6
+[seed 2109436230] family 7:lower_arc attempt 20/30: geometry_ok=19 planner_ok=12 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=12 last_raw_steps=6155 max_raw=1110
+[seed 2109436230] family 7:lower_arc attempt 30/30: geometry_ok=29 planner_ok=19 planner_fail=10 quality_ok=0 resampled_long=0 raw_too_long=19 last_raw_steps=6279 max_raw=1110
+[seed 2109436230] family 7:lower_arc failed after 30 candidates (geometry_ok=29, planner_ok=19, quality_ok=0, resampled_long=0, raw_too_long=19)
+[seed 2109436230] family 8:high_loop search started (30 candidates)
+[seed 2109436230] family 8:high_loop attempt 10/30: geometry_ok=10 planner_ok=3 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=3 last_raw_steps=8997 max_raw=1110
+[seed 2109436230] family 8:high_loop attempt 20/30: geometry_ok=20 planner_ok=8 planner_fail=12 quality_ok=0 resampled_long=0 raw_too_long=8 last_raw_steps=8813 max_raw=1110
+[seed 2109436230] family 8:high_loop attempt 30/30: geometry_ok=30 planner_ok=12 planner_fail=18 quality_ok=0 resampled_long=0 raw_too_long=12
+[seed 2109436230] family 8:high_loop failed after 30 candidates (geometry_ok=30, planner_ok=12, quality_ok=0, resampled_long=0, raw_too_long=12)
+[seed 2109436230] family 9:low_loop search started (30 candidates)
+[waypoint diagnostics] family 9:low_loop: candidate_rejects=1 workspace_bounds_fail=4 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436230] family 9:low_loop attempt 10/30: geometry_ok=9 planner_ok=4 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=4
+[waypoint diagnostics] family 9:low_loop: candidate_rejects=2 workspace_bounds_fail=8 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 9:low_loop: candidate_rejects=3 workspace_bounds_fail=12 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436230] family 9:low_loop attempt 20/30: geometry_ok=16 planner_ok=10 planner_fail=6 quality_ok=0 resampled_long=0 raw_too_long=10 last_raw_steps=5473 max_raw=1110
+[seed 2109436230] family 9:low_loop attempt 30/30: geometry_ok=26 planner_ok=16 planner_fail=10 quality_ok=0 resampled_long=0 raw_too_long=16 last_raw_steps=4622 max_raw=1110
+[seed 2109436230] family 9:low_loop failed after 30 candidates (geometry_ok=26, planner_ok=16, quality_ok=0, resampled_long=0, raw_too_long=16)
+[seed 2109436230] family 10:shallow_direct search started (30 candidates)
+[seed 2109436230] family 10:shallow_direct attempt 10/30: geometry_ok=10 planner_ok=8 planner_fail=2 quality_ok=0 resampled_long=0 raw_too_long=8 last_raw_steps=6399 max_raw=1110
+[seed 2109436230] family 10:shallow_direct attempt 20/30: geometry_ok=20 planner_ok=15 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=15
+[seed 2109436230] family 10:shallow_direct attempt 30/30: geometry_ok=30 planner_ok=22 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=22
+[seed 2109436230] family 10:shallow_direct failed after 30 candidates (geometry_ok=30, planner_ok=22, quality_ok=0, resampled_long=0, raw_too_long=22)
+[seed 2109436230] family 11:extreme_detour search started (30 candidates)
+[seed 2109436230] family 11:extreme_detour attempt 10/30: geometry_ok=10 planner_ok=5 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=5 last_raw_steps=4685 max_raw=1110
+[seed 2109436230] family 11:extreme_detour attempt 20/30: geometry_ok=20 planner_ok=12 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=12
+[seed 2109436230] family 11:extreme_detour attempt 30/30: geometry_ok=30 planner_ok=21 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=21 last_raw_steps=4710 max_raw=1110
+[seed 2109436230] family 11:extreme_detour failed after 30 candidates (geometry_ok=30, planner_ok=21, quality_ok=0, resampled_long=0, raw_too_long=21)
+[seed 2109436230] insufficient feasible families: found=[] count=0/12 required>=4
+[seed 2109436230] skipped: no complete feasible variant set
+[seed 2109436231] reset 2/500; collected=0/30
+[seed 2109436231] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436231] goal=[0.11079134792089462, -0.34825024008750916, 0.5990749597549438] checking workspace/base/table feasibility
+[seed 2109436231] start accepted after attempt=1 tcp=[-0.24605940282344818, -0.34709152579307556, 0.3533574938774109] goal_orientation=start_tcp_orientation
+[seed 2109436231] goal reachable from start: status=Success
+[seed 2109436231] family 0:left_wide search started (30 candidates)
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=40 workspace_bounds_fail=189 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436231] family 0:left_wide attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436231] family 0:left_wide attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=60 workspace_bounds_fail=269 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436231] family 0:left_wide attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436231] family 0:left_wide failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436231] family 1:right_wide search started (30 candidates)
+[seed 2109436231] family 1:right_wide attempt 10/30: geometry_ok=10 planner_ok=9 planner_fail=1 quality_ok=0 resampled_long=0 raw_too_long=9 last_raw_steps=2984 max_raw=1110
+[seed 2109436231] family 1:right_wide attempt 20/30: geometry_ok=20 planner_ok=15 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=15
+[seed 2109436231] family 1:right_wide attempt 30/30: geometry_ok=30 planner_ok=19 planner_fail=11 quality_ok=0 resampled_long=0 raw_too_long=19 last_raw_steps=2929 max_raw=1110
+[seed 2109436231] family 1:right_wide failed after 30 candidates (geometry_ok=30, planner_ok=19, quality_ok=0, resampled_long=0, raw_too_long=19)
+[seed 2109436231] family 2:upper_left search started (30 candidates)
+[waypoint diagnostics] family 2:upper_left: candidate_rejects=1 workspace_bounds_fail=4 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 2:upper_left: candidate_rejects=2 workspace_bounds_fail=8 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 2:upper_left: candidate_rejects=3 workspace_bounds_fail=12 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436231] family 2:upper_left attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 2:upper_left: candidate_rejects=20 workspace_bounds_fail=80 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436231] family 2:upper_left attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436231] family 2:upper_left attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436231] family 2:upper_left failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436231] family 3:upper_right search started (30 candidates)
+[seed 2109436231] family 3:upper_right attempt 10/30: geometry_ok=10 planner_ok=5 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436231] family 3:upper_right attempt 20/30: geometry_ok=20 planner_ok=11 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436231] family 3:upper_right attempt 30/30: geometry_ok=30 planner_ok=12 planner_fail=18 quality_ok=0 resampled_long=0 raw_too_long=12 last_raw_steps=4714 max_raw=1110
+[seed 2109436231] family 3:upper_right failed after 30 candidates (geometry_ok=30, planner_ok=12, quality_ok=0, resampled_long=0, raw_too_long=12)
+[seed 2109436231] family 4:lower_left search started (30 candidates)
+[waypoint diagnostics] family 4:lower_left: candidate_rejects=1 workspace_bounds_fail=5 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 4:lower_left: candidate_rejects=2 workspace_bounds_fail=10 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 4:lower_left: candidate_rejects=3 workspace_bounds_fail=14 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436231] family 4:lower_left attempt 10/30: geometry_ok=7 planner_ok=5 planner_fail=2 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436231] family 4:lower_left attempt 20/30: geometry_ok=15 planner_ok=10 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=10
+[seed 2109436231] family 4:lower_left attempt 30/30: geometry_ok=21 planner_ok=12 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=12
+[seed 2109436231] family 4:lower_left failed after 30 candidates (geometry_ok=21, planner_ok=12, quality_ok=0, resampled_long=0, raw_too_long=12)
+[seed 2109436231] family 5:lower_right search started (30 candidates)
+[seed 2109436231] family 5:lower_right attempt 10/30: geometry_ok=10 planner_ok=5 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=5 last_raw_steps=2954 max_raw=1110
+[seed 2109436231] family 5:lower_right attempt 20/30: geometry_ok=20 planner_ok=8 planner_fail=12 quality_ok=0 resampled_long=0 raw_too_long=8
+[seed 2109436231] family 5:lower_right attempt 30/30: geometry_ok=30 planner_ok=12 planner_fail=18 quality_ok=0 resampled_long=0 raw_too_long=12
+[seed 2109436231] family 5:lower_right failed after 30 candidates (geometry_ok=30, planner_ok=12, quality_ok=0, resampled_long=0, raw_too_long=12)
+[seed 2109436231] family 6:upper_arc search started (30 candidates)
+[seed 2109436231] family 6:upper_arc attempt 10/30: geometry_ok=10 planner_ok=7 planner_fail=3 quality_ok=0 resampled_long=0 raw_too_long=7 last_raw_steps=4324 max_raw=1110
+[seed 2109436231] family 6:upper_arc attempt 20/30: geometry_ok=20 planner_ok=13 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=13 last_raw_steps=4416 max_raw=1110
+[seed 2109436231] family 6:upper_arc attempt 30/30: geometry_ok=30 planner_ok=18 planner_fail=12 quality_ok=0 resampled_long=0 raw_too_long=18
+[seed 2109436231] family 6:upper_arc failed after 30 candidates (geometry_ok=30, planner_ok=18, quality_ok=0, resampled_long=0, raw_too_long=18)
+[seed 2109436231] family 7:lower_arc search started (30 candidates)
+[seed 2109436231] family 7:lower_arc attempt 10/30: geometry_ok=10 planner_ok=7 planner_fail=3 quality_ok=0 resampled_long=0 raw_too_long=7 last_raw_steps=2863 max_raw=1110
+[seed 2109436231] family 7:lower_arc attempt 20/30: geometry_ok=20 planner_ok=15 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=2898 max_raw=1110
+[seed 2109436231] family 7:lower_arc attempt 30/30: geometry_ok=30 planner_ok=22 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=22
+[seed 2109436231] family 7:lower_arc failed after 30 candidates (geometry_ok=30, planner_ok=22, quality_ok=0, resampled_long=0, raw_too_long=22)
+[seed 2109436231] family 8:high_loop search started (30 candidates)
+[seed 2109436231] family 8:high_loop attempt 10/30: geometry_ok=10 planner_ok=5 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436231] family 8:high_loop attempt 20/30: geometry_ok=20 planner_ok=11 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436231] family 8:high_loop attempt 30/30: geometry_ok=30 planner_ok=19 planner_fail=11 quality_ok=0 resampled_long=0 raw_too_long=19 last_raw_steps=4147 max_raw=1110
+[seed 2109436231] family 8:high_loop failed after 30 candidates (geometry_ok=30, planner_ok=19, quality_ok=0, resampled_long=0, raw_too_long=19)
+[seed 2109436231] family 9:low_loop search started (30 candidates)
+[seed 2109436231] family 9:low_loop attempt 10/30: geometry_ok=10 planner_ok=7 planner_fail=3 quality_ok=0 resampled_long=0 raw_too_long=7 last_raw_steps=2846 max_raw=1110
+[seed 2109436231] family 9:low_loop attempt 20/30: geometry_ok=20 planner_ok=11 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436231] family 9:low_loop attempt 30/30: geometry_ok=30 planner_ok=14 planner_fail=16 quality_ok=0 resampled_long=0 raw_too_long=14 last_raw_steps=2828 max_raw=1110
+[seed 2109436231] family 9:low_loop failed after 30 candidates (geometry_ok=30, planner_ok=14, quality_ok=0, resampled_long=0, raw_too_long=14)
+[seed 2109436231] family 10:shallow_direct search started (30 candidates)
+[seed 2109436231] family 10:shallow_direct attempt 10/30: geometry_ok=10 planner_ok=6 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=6 last_raw_steps=2899 max_raw=1110
+[seed 2109436231] family 10:shallow_direct attempt 20/30: geometry_ok=20 planner_ok=14 planner_fail=6 quality_ok=0 resampled_long=0 raw_too_long=14 last_raw_steps=2887 max_raw=1110
+[seed 2109436231] family 10:shallow_direct attempt 30/30: geometry_ok=30 planner_ok=20 planner_fail=10 quality_ok=0 resampled_long=0 raw_too_long=20 last_raw_steps=2928 max_raw=1110
+[seed 2109436231] family 10:shallow_direct failed after 30 candidates (geometry_ok=30, planner_ok=20, quality_ok=0, resampled_long=0, raw_too_long=20)
+[seed 2109436231] family 11:extreme_detour search started (30 candidates)
+[seed 2109436231] family 11:extreme_detour attempt 10/30: geometry_ok=10 planner_ok=5 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436231] family 11:extreme_detour attempt 20/30: geometry_ok=20 planner_ok=11 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436231] family 11:extreme_detour attempt 30/30: geometry_ok=30 planner_ok=17 planner_fail=13 quality_ok=0 resampled_long=0 raw_too_long=17
+[seed 2109436231] family 11:extreme_detour failed after 30 candidates (geometry_ok=30, planner_ok=17, quality_ok=0, resampled_long=0, raw_too_long=17)
+[seed 2109436231] insufficient feasible families: found=[] count=0/12 required>=4
+[seed 2109436231] skipped: no complete feasible variant set
+[seed 2109436232] reset 3/500; collected=0/30
+[seed 2109436232] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436232] goal=[-0.07553218305110931, -0.1523963063955307, 0.24852851033210754] checking workspace/base/table feasibility
+[seed 2109436232] start accepted after attempt=1 tcp=[-0.33331117033958435, -0.002679673256352544, 0.42497503757476807] goal_orientation=start_tcp_orientation
+[seed 2109436232] goal reachable from start: status=Success
+[seed 2109436232] family 0:left_wide search started (30 candidates)
+[seed 2109436232] family 0:left_wide first feasible candidate at attempt 1/30: steps=90 raw_steps=90 deviation=0.213 path_ratio=1.71
+[seed 2109436232] family 0:left_wide selected: steps=90 deviation=0.213 path_ratio=1.71
+[seed 2109436232] family 1:right_wide search started (30 candidates)
+[seed 2109436232] family 1:right_wide first feasible candidate at attempt 1/30: steps=92 raw_steps=92 deviation=0.260 path_ratio=1.99
+[seed 2109436232] family 1:right_wide selected: steps=92 deviation=0.260 path_ratio=1.99
+[seed 2109436232] family 2:upper_left search started (30 candidates)
+[seed 2109436232] family 2:upper_left first feasible candidate at attempt 1/30: steps=93 raw_steps=93 deviation=0.204 path_ratio=1.77
+[seed 2109436232] family 2:upper_left selected: steps=93 deviation=0.204 path_ratio=1.77
+[seed 2109436232] family 3:upper_right search started (30 candidates)
+[seed 2109436232] family 3:upper_right first feasible candidate at attempt 1/30: steps=93 raw_steps=93 deviation=0.255 path_ratio=1.96
+[seed 2109436232] family 3:upper_right selected: steps=93 deviation=0.255 path_ratio=1.96
+[seed 2109436232] family 4:lower_left search started (30 candidates)
+[seed 2109436232] family 4:lower_left first feasible candidate at attempt 6/30: steps=82 raw_steps=82 deviation=0.145 path_ratio=1.41
+[seed 2109436232] family 4:lower_left selected: steps=82 deviation=0.145 path_ratio=1.41
+[seed 2109436232] family 5:lower_right search started (30 candidates)
+[seed 2109436232] family 5:lower_right first feasible candidate at attempt 2/30: steps=80 raw_steps=80 deviation=0.139 path_ratio=1.37
+[seed 2109436232] family 5:lower_right selected: steps=80 deviation=0.139 path_ratio=1.37
+[seed 2109436232] family 6:upper_arc search started (30 candidates)
+[seed 2109436232] family 6:upper_arc first feasible candidate at attempt 1/30: steps=72 raw_steps=72 deviation=0.154 path_ratio=1.36
+[seed 2109436232] family 6:upper_arc selected: steps=72 deviation=0.154 path_ratio=1.36
+[seed 2109436232] family 7:lower_arc search started (30 candidates)
+[seed 2109436232] family 7:lower_arc first feasible candidate at attempt 1/30: steps=67 raw_steps=67 deviation=0.092 path_ratio=1.16
+[seed 2109436232] family 7:lower_arc selected: steps=67 deviation=0.092 path_ratio=1.16
+[seed 2109436232] family 8:high_loop search started (30 candidates)
+[seed 2109436232] family 8:high_loop first feasible candidate at attempt 1/30: steps=68 raw_steps=68 deviation=0.145 path_ratio=1.33
+[seed 2109436232] family 8:high_loop selected: steps=68 deviation=0.145 path_ratio=1.33
+[seed 2109436232] family 9:low_loop search started (30 candidates)
+[seed 2109436232] family 9:low_loop first feasible candidate at attempt 1/30: steps=71 raw_steps=71 deviation=0.175 path_ratio=1.43
+[seed 2109436232] family 9:low_loop selected: steps=71 deviation=0.175 path_ratio=1.43
+[seed 2109436232] family 10:shallow_direct search started (30 candidates)
+[seed 2109436232] family 10:shallow_direct first feasible candidate at attempt 1/30: steps=58 raw_steps=58 deviation=0.054 path_ratio=1.05
+[seed 2109436232] family 10:shallow_direct selected: steps=58 deviation=0.054 path_ratio=1.05
+[seed 2109436232] family 11:extreme_detour search started (30 candidates)
+[seed 2109436232] family 11:extreme_detour first feasible candidate at attempt 1/30: steps=81 raw_steps=81 deviation=0.190 path_ratio=1.59
+[seed 2109436232] family 11:extreme_detour selected: steps=81 deviation=0.190 path_ratio=1.59
+[seed 2109436232] replay family 0:left_wide planned_steps=90
+[seed 2109436232] replay done 0:left_wide success=True final_distance=0.0196 settle=0
+[seed 2109436232] replay family 1:right_wide planned_steps=92
+[seed 2109436232] replay done 1:right_wide success=True final_distance=0.0157 settle=0
+[seed 2109436232] replay family 2:upper_left planned_steps=93
+[seed 2109436232] replay done 2:upper_left success=True final_distance=0.0206 settle=0
+[seed 2109436232] replay family 3:upper_right planned_steps=93
+[seed 2109436232] replay done 3:upper_right success=True final_distance=0.0202 settle=0
+[seed 2109436232] replay family 4:lower_left planned_steps=82
+[seed 2109436232] replay done 4:lower_left success=True final_distance=0.0188 settle=0
+[seed 2109436232] replay family 5:lower_right planned_steps=80
+[seed 2109436232] replay done 5:lower_right success=True final_distance=0.0160 settle=0
+[seed 2109436232] replay family 6:upper_arc planned_steps=72
+[seed 2109436232] replay done 6:upper_arc success=True final_distance=0.0231 settle=0
+[seed 2109436232] replay family 7:lower_arc planned_steps=67
+[seed 2109436232] replay done 7:lower_arc success=True final_distance=0.0208 settle=0
+[seed 2109436232] replay family 8:high_loop planned_steps=68
+[seed 2109436232] replay done 8:high_loop success=True final_distance=0.0228 settle=0
+[seed 2109436232] replay family 9:low_loop planned_steps=71
+[seed 2109436232] replay done 9:low_loop success=True final_distance=0.0212 settle=0
+[seed 2109436232] replay family 10:shallow_direct planned_steps=58
+[seed 2109436232] replay done 10:shallow_direct success=True final_distance=0.0193 settle=0
+[seed 2109436232] replay family 11:extreme_detour planned_steps=81
+[seed 2109436232] replay done 11:extreme_detour success=True final_distance=0.0172 settle=0
+[seed 2109436232] accepted 12/12 successful replayed families
+demo 1/30: seed=2109436232 variant=left_wide steps=93 hold=8 success=True final_distance=0.0196
+demo 2/30: seed=2109436232 variant=right_wide steps=91 hold=8 success=True final_distance=0.0157
+demo 3/30: seed=2109436232 variant=upper_left steps=91 hold=8 success=True final_distance=0.0206
+demo 4/30: seed=2109436232 variant=upper_right steps=94 hold=8 success=True final_distance=0.0202
+demo 5/30: seed=2109436232 variant=lower_left steps=85 hold=8 success=True final_distance=0.0188
+demo 6/30: seed=2109436232 variant=lower_right steps=84 hold=8 success=True final_distance=0.0160
+demo 7/30: seed=2109436232 variant=upper_arc steps=73 hold=8 success=True final_distance=0.0231
+demo 8/30: seed=2109436232 variant=lower_arc steps=69 hold=8 success=True final_distance=0.0208
+demo 9/30: seed=2109436232 variant=high_loop steps=71 hold=8 success=True final_distance=0.0228
+demo 10/30: seed=2109436232 variant=low_loop steps=74 hold=8 success=True final_distance=0.0212
+demo 11/30: seed=2109436232 variant=shallow_direct steps=61 hold=8 success=True final_distance=0.0193
+demo 12/30: seed=2109436232 variant=extreme_detour steps=81 hold=8 success=True final_distance=0.0172
+[seed 2109436233] reset 4/500; collected=12/30
+[seed 2109436233] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436233] goal=[0.1718231737613678, -0.13054771721363068, 0.20388802886009216] checking workspace/base/table feasibility
+[seed 2109436233] start accepted after attempt=1 tcp=[0.1549759954214096, 0.21458609402179718, 0.2289314866065979] goal_orientation=start_tcp_orientation
+[seed 2109436233] goal reachable from start: status=Success
+[seed 2109436233] family 0:left_wide search started (30 candidates)
+[seed 2109436233] family 0:left_wide first feasible candidate at attempt 1/30: steps=134 raw_steps=134 deviation=0.241 path_ratio=1.92
+[seed 2109436233] family 0:left_wide selected: steps=134 deviation=0.241 path_ratio=1.92
+[seed 2109436233] family 1:right_wide search started (30 candidates)
+[waypoint diagnostics] family 1:right_wide: candidate_rejects=1 workspace_bounds_fail=4 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 1:right_wide attempt 10/30: geometry_ok=9 planner_ok=3 planner_fail=6 quality_ok=0 resampled_long=0 raw_too_long=3
+[seed 2109436233] family 1:right_wide attempt 20/30: geometry_ok=19 planner_ok=9 planner_fail=10 quality_ok=0 resampled_long=0 raw_too_long=9 last_raw_steps=7744 max_raw=1110
+[seed 2109436233] family 1:right_wide attempt 30/30: geometry_ok=29 planner_ok=15 planner_fail=14 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=8839 max_raw=1110
+[seed 2109436233] family 1:right_wide failed after 30 candidates (geometry_ok=29, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436233] family 2:upper_left search started (30 candidates)
+[seed 2109436233] family 2:upper_left first feasible candidate at attempt 1/30: steps=103 raw_steps=103 deviation=0.262 path_ratio=1.87
+[seed 2109436233] family 2:upper_left selected: steps=103 deviation=0.262 path_ratio=1.87
+[seed 2109436233] family 3:upper_right search started (30 candidates)
+[seed 2109436233] family 3:upper_right attempt 10/30: geometry_ok=10 planner_ok=6 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=6
+[seed 2109436233] family 3:upper_right attempt 20/30: geometry_ok=20 planner_ok=12 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=12 last_raw_steps=7127 max_raw=1110
+[seed 2109436233] family 3:upper_right attempt 30/30: geometry_ok=30 planner_ok=15 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=15
+[seed 2109436233] family 3:upper_right failed after 30 candidates (geometry_ok=30, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436233] family 4:lower_left search started (30 candidates)
+[seed 2109436233] family 4:lower_left attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 4:lower_left: candidate_rejects=20 workspace_bounds_fail=82 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 4:lower_left attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 4:lower_left attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 4:lower_left failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436233] family 5:lower_right search started (30 candidates)
+[waypoint diagnostics] family 5:lower_right: candidate_rejects=1 workspace_bounds_fail=4 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 5:lower_right: candidate_rejects=2 workspace_bounds_fail=8 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 5:lower_right: candidate_rejects=3 workspace_bounds_fail=12 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 5:lower_right attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 5:lower_right: candidate_rejects=20 workspace_bounds_fail=80 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 5:lower_right attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 5:lower_right attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 5:lower_right failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436233] family 6:upper_arc search started (30 candidates)
+[seed 2109436233] family 6:upper_arc first feasible candidate at attempt 1/30: steps=370 raw_steps=830 deviation=0.186 path_ratio=1.48
+[seed 2109436233] family 6:upper_arc selected: steps=370 deviation=0.186 path_ratio=1.48
+[seed 2109436233] family 7:lower_arc search started (30 candidates)
+[waypoint diagnostics] family 7:lower_arc: candidate_rejects=2 workspace_bounds_fail=8 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 7:lower_arc: candidate_rejects=3 workspace_bounds_fail=12 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 7:lower_arc attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 7:lower_arc: candidate_rejects=20 workspace_bounds_fail=80 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 7:lower_arc attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 7:lower_arc attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 7:lower_arc failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436233] family 8:high_loop search started (30 candidates)
+[seed 2109436233] family 8:high_loop first feasible candidate at attempt 1/30: steps=83 raw_steps=83 deviation=0.198 path_ratio=1.53
+[seed 2109436233] family 8:high_loop selected: steps=83 deviation=0.198 path_ratio=1.53
+[seed 2109436233] family 9:low_loop search started (30 candidates)
+[seed 2109436233] family 9:low_loop attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 9:low_loop: candidate_rejects=20 workspace_bounds_fail=80 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436233] family 9:low_loop attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 9:low_loop attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436233] family 9:low_loop failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436233] family 10:shallow_direct search started (30 candidates)
+[seed 2109436233] family 10:shallow_direct first feasible candidate at attempt 1/30: steps=56 raw_steps=56 deviation=0.021 path_ratio=1.01
+[seed 2109436233] family 10:shallow_direct selected: steps=56 deviation=0.021 path_ratio=1.01
+[seed 2109436233] family 11:extreme_detour search started (30 candidates)
+[seed 2109436233] family 11:extreme_detour attempt 10/30: geometry_ok=10 planner_ok=4 planner_fail=6 quality_ok=0 resampled_long=0 raw_too_long=4 last_raw_steps=6013 max_raw=1110
+[seed 2109436233] family 11:extreme_detour attempt 20/30: geometry_ok=20 planner_ok=7 planner_fail=13 quality_ok=0 resampled_long=0 raw_too_long=7
+[seed 2109436233] family 11:extreme_detour attempt 30/30: geometry_ok=30 planner_ok=13 planner_fail=17 quality_ok=0 resampled_long=0 raw_too_long=13
+[seed 2109436233] family 11:extreme_detour failed after 30 candidates (geometry_ok=30, planner_ok=13, quality_ok=0, resampled_long=0, raw_too_long=13)
+[seed 2109436233] replay family 0:left_wide planned_steps=134
+[seed 2109436233] replay done 0:left_wide success=True final_distance=0.0248 settle=0
+[seed 2109436233] replay family 2:upper_left planned_steps=103
+[seed 2109436233] replay done 2:upper_left success=True final_distance=0.0222 settle=0
+[seed 2109436233] replay family 6:upper_arc planned_steps=370
+[seed 2109436233] replay done 6:upper_arc success=True final_distance=0.0165 settle=0
+[seed 2109436233] replay family 8:high_loop planned_steps=83
+[seed 2109436233] replay done 8:high_loop success=True final_distance=0.0215 settle=0
+[seed 2109436233] replay family 10:shallow_direct planned_steps=56
+[seed 2109436233] replay done 10:shallow_direct success=True final_distance=0.0127 settle=0
+[seed 2109436233] accepted 5/5 successful replayed families
+demo 13/30: seed=2109436233 variant=left_wide steps=127 hold=8 success=True final_distance=0.0248
+demo 14/30: seed=2109436233 variant=upper_left steps=102 hold=8 success=True final_distance=0.0222
+demo 15/30: seed=2109436233 variant=upper_arc steps=377 hold=8 success=True final_distance=0.0165
+demo 16/30: seed=2109436233 variant=high_loop steps=82 hold=8 success=True final_distance=0.0215
+demo 17/30: seed=2109436233 variant=shallow_direct steps=57 hold=8 success=True final_distance=0.0127
+[seed 2109436234] reset 5/500; collected=17/30
+[seed 2109436234] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436234] goal=[0.3513266146183014, 0.23002447187900543, 0.25881335139274597] checking workspace/base/table feasibility
+[seed 2109436234] start accepted after attempt=2 tcp=[0.1604495495557785, 0.08783278614282608, 0.26339924335479736] goal_orientation=start_tcp_orientation
+[seed 2109436234] goal reachable from start: status=Success
+[seed 2109436234] family 0:left_wide search started (30 candidates)
+[seed 2109436234] family 0:left_wide attempt 10/30: geometry_ok=10 planner_ok=6 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=6 last_raw_steps=11331 max_raw=1110
+[seed 2109436234] family 0:left_wide attempt 20/30: geometry_ok=20 planner_ok=11 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436234] family 0:left_wide attempt 30/30: geometry_ok=30 planner_ok=15 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=15
+[seed 2109436234] family 0:left_wide failed after 30 candidates (geometry_ok=30, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436234] family 1:right_wide search started (30 candidates)
+[seed 2109436234] family 1:right_wide attempt 10/30: geometry_ok=10 planner_ok=6 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=6 last_raw_steps=5457 max_raw=1110
+[seed 2109436234] family 1:right_wide attempt 20/30: geometry_ok=20 planner_ok=11 planner_fail=9 quality_ok=0 resampled_long=0 raw_too_long=11
+[seed 2109436234] family 1:right_wide attempt 30/30: geometry_ok=30 planner_ok=15 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=4767 max_raw=1110
+[seed 2109436234] family 1:right_wide failed after 30 candidates (geometry_ok=30, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436234] family 2:upper_left search started (30 candidates)
+[seed 2109436234] family 2:upper_left attempt 10/30: geometry_ok=10 planner_ok=2 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=2
+[seed 2109436234] family 2:upper_left attempt 20/30: geometry_ok=20 planner_ok=6 planner_fail=14 quality_ok=0 resampled_long=0 raw_too_long=6
+[seed 2109436234] family 2:upper_left attempt 30/30: geometry_ok=30 planner_ok=9 planner_fail=21 quality_ok=0 resampled_long=0 raw_too_long=9
+[seed 2109436234] family 2:upper_left failed after 30 candidates (geometry_ok=30, planner_ok=9, quality_ok=0, resampled_long=0, raw_too_long=9)
+[seed 2109436234] family 3:upper_right search started (30 candidates)
+[seed 2109436234] family 3:upper_right attempt 10/30: geometry_ok=10 planner_ok=2 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=2
+[seed 2109436234] family 3:upper_right attempt 20/30: geometry_ok=20 planner_ok=4 planner_fail=16 quality_ok=0 resampled_long=0 raw_too_long=4 last_raw_steps=7735 max_raw=1110
+[seed 2109436234] family 3:upper_right attempt 30/30: geometry_ok=30 planner_ok=7 planner_fail=23 quality_ok=0 resampled_long=0 raw_too_long=7
+[seed 2109436234] family 3:upper_right failed after 30 candidates (geometry_ok=30, planner_ok=7, quality_ok=0, resampled_long=0, raw_too_long=7)
+[seed 2109436234] family 4:lower_left search started (30 candidates)
+[seed 2109436234] family 4:lower_left attempt 10/30: geometry_ok=10 planner_ok=7 planner_fail=3 quality_ok=0 resampled_long=0 raw_too_long=7
+[seed 2109436234] family 4:lower_left attempt 20/30: geometry_ok=20 planner_ok=12 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=12 last_raw_steps=8561 max_raw=1110
+[seed 2109436234] family 4:lower_left attempt 30/30: geometry_ok=30 planner_ok=15 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=8494 max_raw=1110
+[seed 2109436234] family 4:lower_left failed after 30 candidates (geometry_ok=30, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436234] family 5:lower_right search started (30 candidates)
+[seed 2109436234] family 5:lower_right attempt 10/30: geometry_ok=9 planner_ok=5 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436234] family 5:lower_right attempt 20/30: geometry_ok=19 planner_ok=9 planner_fail=10 quality_ok=0 resampled_long=0 raw_too_long=9
+[seed 2109436234] family 5:lower_right attempt 30/30: geometry_ok=29 planner_ok=15 planner_fail=14 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=7041 max_raw=1110
+[seed 2109436234] family 5:lower_right failed after 30 candidates (geometry_ok=29, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436234] family 6:upper_arc search started (30 candidates)
+[seed 2109436234] family 6:upper_arc attempt 10/30: geometry_ok=10 planner_ok=8 planner_fail=2 quality_ok=0 resampled_long=0 raw_too_long=8
+[seed 2109436234] family 6:upper_arc attempt 20/30: geometry_ok=20 planner_ok=13 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=13 last_raw_steps=7115 max_raw=1110
+[seed 2109436234] family 6:upper_arc attempt 30/30: geometry_ok=30 planner_ok=19 planner_fail=11 quality_ok=0 resampled_long=0 raw_too_long=19 last_raw_steps=5963 max_raw=1110
+[seed 2109436234] family 6:upper_arc failed after 30 candidates (geometry_ok=30, planner_ok=19, quality_ok=0, resampled_long=0, raw_too_long=19)
+[seed 2109436234] family 7:lower_arc search started (30 candidates)
+[seed 2109436234] family 7:lower_arc attempt 10/30: geometry_ok=7 planner_ok=5 planner_fail=2 quality_ok=0 resampled_long=0 raw_too_long=5 last_raw_steps=5125 max_raw=1110
+[seed 2109436234] family 7:lower_arc attempt 20/30: geometry_ok=16 planner_ok=12 planner_fail=4 quality_ok=0 resampled_long=0 raw_too_long=12
+[seed 2109436234] family 7:lower_arc attempt 30/30: geometry_ok=25 planner_ok=20 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=20 last_raw_steps=5929 max_raw=1110
+[seed 2109436234] family 7:lower_arc failed after 30 candidates (geometry_ok=25, planner_ok=20, quality_ok=0, resampled_long=0, raw_too_long=20)
+[seed 2109436234] family 8:high_loop search started (30 candidates)
+[seed 2109436234] family 8:high_loop attempt 10/30: geometry_ok=10 planner_ok=2 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=2
+[seed 2109436234] family 8:high_loop attempt 20/30: geometry_ok=20 planner_ok=8 planner_fail=12 quality_ok=0 resampled_long=0 raw_too_long=8 last_raw_steps=7414 max_raw=1110
+[seed 2109436234] family 8:high_loop attempt 30/30: geometry_ok=30 planner_ok=15 planner_fail=15 quality_ok=0 resampled_long=0 raw_too_long=15 last_raw_steps=7365 max_raw=1110
+[seed 2109436234] family 8:high_loop failed after 30 candidates (geometry_ok=30, planner_ok=15, quality_ok=0, resampled_long=0, raw_too_long=15)
+[seed 2109436234] family 9:low_loop search started (30 candidates)
+[waypoint diagnostics] family 9:low_loop: candidate_rejects=40 workspace_bounds_fail=160 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436234] family 9:low_loop attempt 10/30: geometry_ok=3 planner_ok=2 planner_fail=1 quality_ok=0 resampled_long=0 raw_too_long=2
+[seed 2109436234] family 9:low_loop attempt 20/30: geometry_ok=8 planner_ok=3 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=3
+[seed 2109436234] family 9:low_loop attempt 30/30: geometry_ok=12 planner_ok=5 planner_fail=7 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436234] family 9:low_loop failed after 30 candidates (geometry_ok=12, planner_ok=5, quality_ok=0, resampled_long=0, raw_too_long=5)
+[seed 2109436234] family 10:shallow_direct search started (30 candidates)
+[seed 2109436234] family 10:shallow_direct attempt 10/30: geometry_ok=10 planner_ok=5 planner_fail=5 quality_ok=0 resampled_long=0 raw_too_long=5
+[seed 2109436234] family 10:shallow_direct attempt 20/30: geometry_ok=20 planner_ok=10 planner_fail=10 quality_ok=0 resampled_long=0 raw_too_long=10
+[seed 2109436234] family 10:shallow_direct attempt 30/30: geometry_ok=30 planner_ok=17 planner_fail=13 quality_ok=0 resampled_long=0 raw_too_long=17
+[seed 2109436234] family 10:shallow_direct failed after 30 candidates (geometry_ok=30, planner_ok=17, quality_ok=0, resampled_long=0, raw_too_long=17)
+[seed 2109436234] family 11:extreme_detour search started (30 candidates)
+[seed 2109436234] family 11:extreme_detour attempt 10/30: geometry_ok=10 planner_ok=8 planner_fail=2 quality_ok=0 resampled_long=0 raw_too_long=8 last_raw_steps=6647 max_raw=1110
+[seed 2109436234] family 11:extreme_detour attempt 20/30: geometry_ok=20 planner_ok=12 planner_fail=8 quality_ok=0 resampled_long=0 raw_too_long=12
+[seed 2109436234] family 11:extreme_detour attempt 30/30: geometry_ok=30 planner_ok=17 planner_fail=13 quality_ok=0 resampled_long=0 raw_too_long=17
+[seed 2109436234] family 11:extreme_detour failed after 30 candidates (geometry_ok=30, planner_ok=17, quality_ok=0, resampled_long=0, raw_too_long=17)
+[seed 2109436234] insufficient feasible families: found=[] count=0/12 required>=4
+[seed 2109436234] skipped: no complete feasible variant set
+[seed 2109436235] reset 6/500; collected=17/30
+[seed 2109436235] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436235] goal=[0.18961094319820404, 0.3731593191623688, 0.7063101530075073] checking workspace/base/table feasibility
+[seed 2109436235] start accepted after attempt=1 tcp=[0.09876275807619095, 0.32902827858924866, 0.29668253660202026] goal_orientation=start_tcp_orientation
+[seed 2109436235] rejected: direct goal plan failed from sampled start
+[seed 2109436235] skipped: no complete feasible variant set
+[seed 2109436236] reset 7/500; collected=17/30
+[seed 2109436236] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436236] goal=[0.04487956315279007, -0.35124170780181885, 0.3942718505859375] checking workspace/base/table feasibility
+[seed 2109436236] start accepted after attempt=1 tcp=[-0.3651367127895355, -0.14963245391845703, 0.2195405662059784] goal_orientation=start_tcp_orientation
+[seed 2109436236] goal reachable from start: status=Success
+[seed 2109436236] family 0:left_wide search started (30 candidates)
+[seed 2109436236] family 0:left_wide attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 0:left_wide: candidate_rejects=80 workspace_bounds_fail=365 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436236] family 0:left_wide attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436236] family 0:left_wide attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436236] family 0:left_wide failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436236] family 1:right_wide search started (30 candidates)
+[seed 2109436236] family 1:right_wide first feasible candidate at attempt 1/30: steps=110 raw_steps=110 deviation=0.266 path_ratio=1.59
+[seed 2109436236] family 1:right_wide selected: steps=110 deviation=0.266 path_ratio=1.59
+[seed 2109436236] family 2:upper_left search started (30 candidates)
+[seed 2109436236] family 2:upper_left first feasible candidate at attempt 1/30: steps=116 raw_steps=116 deviation=0.293 path_ratio=1.61
+[seed 2109436236] family 2:upper_left selected: steps=116 deviation=0.293 path_ratio=1.61
+[seed 2109436236] family 3:upper_right search started (30 candidates)
+[seed 2109436236] family 3:upper_right first feasible candidate at attempt 1/30: steps=116 raw_steps=116 deviation=0.306 path_ratio=1.69
+[seed 2109436236] family 3:upper_right selected: steps=116 deviation=0.306 path_ratio=1.69
+[seed 2109436236] family 4:lower_left search started (30 candidates)
+[waypoint diagnostics] family 4:lower_left: candidate_rejects=40 workspace_bounds_fail=162 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436236] family 4:lower_left first feasible candidate at attempt 3/30: steps=119 raw_steps=119 deviation=0.163 path_ratio=1.25
+[seed 2109436236] family 4:lower_left selected: steps=119 deviation=0.163 path_ratio=1.25
+[seed 2109436236] family 5:lower_right search started (30 candidates)
+[seed 2109436236] family 5:lower_right first feasible candidate at attempt 1/30: steps=105 raw_steps=105 deviation=0.138 path_ratio=1.16
+[seed 2109436236] family 5:lower_right selected: steps=105 deviation=0.138 path_ratio=1.16
+[seed 2109436236] family 6:upper_arc search started (30 candidates)
+[seed 2109436236] family 6:upper_arc first feasible candidate at attempt 1/30: steps=94 raw_steps=94 deviation=0.201 path_ratio=1.31
+[seed 2109436236] family 6:upper_arc selected: steps=94 deviation=0.201 path_ratio=1.31
+[seed 2109436236] family 7:lower_arc search started (30 candidates)
+[seed 2109436236] family 7:lower_arc first feasible candidate at attempt 1/30: steps=90 raw_steps=90 deviation=0.089 path_ratio=1.07
+[seed 2109436236] family 7:lower_arc selected: steps=90 deviation=0.089 path_ratio=1.07
+[seed 2109436236] family 8:high_loop search started (30 candidates)
+[seed 2109436236] family 8:high_loop first feasible candidate at attempt 1/30: steps=89 raw_steps=89 deviation=0.159 path_ratio=1.20
+[seed 2109436236] family 8:high_loop selected: steps=89 deviation=0.159 path_ratio=1.20
+[seed 2109436236] family 9:low_loop search started (30 candidates)
+[seed 2109436236] family 9:low_loop first feasible candidate at attempt 2/30: steps=93 raw_steps=93 deviation=0.177 path_ratio=1.24
+[seed 2109436236] family 9:low_loop selected: steps=93 deviation=0.177 path_ratio=1.24
+[seed 2109436236] family 10:shallow_direct search started (30 candidates)
+[seed 2109436236] family 10:shallow_direct first feasible candidate at attempt 1/30: steps=86 raw_steps=86 deviation=0.015 path_ratio=1.00
+[seed 2109436236] family 10:shallow_direct selected: steps=86 deviation=0.015 path_ratio=1.00
+[seed 2109436236] family 11:extreme_detour search started (30 candidates)
+[seed 2109436236] family 11:extreme_detour first feasible candidate at attempt 1/30: steps=104 raw_steps=104 deviation=0.276 path_ratio=1.60
+[seed 2109436236] family 11:extreme_detour selected: steps=104 deviation=0.276 path_ratio=1.60
+[seed 2109436236] replay family 1:right_wide planned_steps=110
+[seed 2109436236] replay done 1:right_wide success=True final_distance=0.0223 settle=0
+[seed 2109436236] replay family 2:upper_left planned_steps=116
+[seed 2109436236] replay done 2:upper_left success=True final_distance=0.0235 settle=0
+[seed 2109436236] replay family 3:upper_right planned_steps=116
+[seed 2109436236] replay done 3:upper_right success=True final_distance=0.0204 settle=0
+[seed 2109436236] replay family 4:lower_left planned_steps=119
+[seed 2109436236] replay done 4:lower_left success=True final_distance=0.0216 settle=0
+[seed 2109436236] replay family 5:lower_right planned_steps=105
+[seed 2109436236] replay done 5:lower_right success=True final_distance=0.0224 settle=0
+[seed 2109436236] replay family 6:upper_arc planned_steps=94
+[seed 2109436236] replay done 6:upper_arc success=True final_distance=0.0237 settle=0
+[seed 2109436236] replay family 7:lower_arc planned_steps=90
+[seed 2109436236] replay done 7:lower_arc success=True final_distance=0.0234 settle=0
+[seed 2109436236] replay family 8:high_loop planned_steps=89
+[seed 2109436236] replay done 8:high_loop success=True final_distance=0.0244 settle=0
+[seed 2109436236] replay family 9:low_loop planned_steps=93
+[seed 2109436236] replay done 9:low_loop success=True final_distance=0.0236 settle=0
+[seed 2109436236] replay family 10:shallow_direct planned_steps=86
+[seed 2109436236] replay done 10:shallow_direct success=True final_distance=0.0244 settle=0
+[seed 2109436236] replay family 11:extreme_detour planned_steps=104
+[seed 2109436236] replay done 11:extreme_detour success=True final_distance=0.0224 settle=0
+[seed 2109436236] accepted 11/11 successful replayed families
+demo 18/30: seed=2109436236 variant=right_wide steps=108 hold=8 success=True final_distance=0.0223
+demo 19/30: seed=2109436236 variant=upper_left steps=110 hold=8 success=True final_distance=0.0235
+demo 20/30: seed=2109436236 variant=upper_right steps=115 hold=8 success=True final_distance=0.0204
+demo 21/30: seed=2109436236 variant=lower_left steps=115 hold=8 success=True final_distance=0.0216
+demo 22/30: seed=2109436236 variant=lower_right steps=103 hold=8 success=True final_distance=0.0224
+demo 23/30: seed=2109436236 variant=upper_arc steps=92 hold=8 success=True final_distance=0.0237
+demo 24/30: seed=2109436236 variant=lower_arc steps=88 hold=8 success=True final_distance=0.0234
+demo 25/30: seed=2109436236 variant=high_loop steps=85 hold=8 success=True final_distance=0.0244
+demo 26/30: seed=2109436236 variant=low_loop steps=87 hold=8 success=True final_distance=0.0236
+demo 27/30: seed=2109436236 variant=shallow_direct steps=83 hold=8 success=True final_distance=0.0244
+demo 28/30: seed=2109436236 variant=extreme_detour steps=103 hold=8 success=True final_distance=0.0224
+[seed 2109436237] reset 8/500; collected=28/30
+[seed 2109436237] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436237] goal=[0.29667001962661743, 0.2651178538799286, 0.39223411679267883] checking workspace/base/table feasibility
+[seed 2109436237] start accepted after attempt=1 tcp=[0.001866588369011879, -0.20703376829624176, 0.2995927929878235] goal_orientation=start_tcp_orientation
+[seed 2109436237] rejected: direct goal plan failed from sampled start
+[seed 2109436237] skipped: no complete feasible variant set
+[seed 2109436238] reset 9/500; collected=28/30
+[seed 2109436238] waypoint_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]] start_bounds=[[-0.41999998688697815, 0.41999998688697815], [-0.44999998807907104, 0.44999998807907104], [0.20000000298023224, 0.7200000286102295]]
+[seed 2109436238] goal=[-0.2078765630722046, 0.18915113806724548, 0.5866843461990356] checking workspace/base/table feasibility
+[seed 2109436238] start accepted after attempt=2 tcp=[-0.25511541962623596, -0.38973766565322876, 0.3941901922225952] goal_orientation=start_tcp_orientation
+[seed 2109436238] goal reachable from start: status=Success
+[seed 2109436238] family 0:left_wide search started (30 candidates)
+[seed 2109436238] family 0:left_wide first feasible candidate at attempt 1/30: steps=100 raw_steps=100 deviation=0.254 path_ratio=1.41
+[seed 2109436238] family 0:left_wide selected: steps=100 deviation=0.254 path_ratio=1.41
+[seed 2109436238] family 1:right_wide search started (30 candidates)
+[waypoint diagnostics] family 1:right_wide: candidate_rejects=2 workspace_bounds_fail=8 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 1:right_wide: candidate_rejects=3 workspace_bounds_fail=12 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436238] family 1:right_wide attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 1:right_wide: candidate_rejects=20 workspace_bounds_fail=80 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436238] family 1:right_wide attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436238] family 1:right_wide attempt 30/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436238] family 1:right_wide failed after 30 candidates (geometry_ok=0, planner_ok=0, quality_ok=0, resampled_long=0, raw_too_long=0)
+[seed 2109436238] family 2:upper_left search started (30 candidates)
+[seed 2109436238] family 2:upper_left first feasible candidate at attempt 9/30: steps=370 raw_steps=712 deviation=0.243 path_ratio=1.37
+[seed 2109436238] family 2:upper_left selected: steps=370 deviation=0.243 path_ratio=1.37
+[seed 2109436238] family 3:upper_right search started (30 candidates)
+[seed 2109436238] family 3:upper_right first feasible candidate at attempt 1/30: steps=95 raw_steps=95 deviation=0.235 path_ratio=1.34
+[seed 2109436238] family 3:upper_right selected: steps=95 deviation=0.235 path_ratio=1.34
+[seed 2109436238] family 4:lower_left search started (30 candidates)
+[seed 2109436238] family 4:lower_left first feasible candidate at attempt 1/30: steps=81 raw_steps=81 deviation=0.130 path_ratio=1.11
+[seed 2109436238] family 4:lower_left selected: steps=81 deviation=0.130 path_ratio=1.11
+[seed 2109436238] family 5:lower_right search started (30 candidates)
+[seed 2109436238] family 5:lower_right first feasible candidate at attempt 1/30: steps=102 raw_steps=102 deviation=0.179 path_ratio=1.19
+[seed 2109436238] family 5:lower_right selected: steps=102 deviation=0.179 path_ratio=1.19
+[seed 2109436238] family 6:upper_arc search started (30 candidates)
+[seed 2109436238] family 6:upper_arc first feasible candidate at attempt 1/30: steps=73 raw_steps=73 deviation=0.193 path_ratio=1.18
+[seed 2109436238] family 6:upper_arc selected: steps=73 deviation=0.193 path_ratio=1.18
+[seed 2109436238] family 7:lower_arc search started (30 candidates)
+[seed 2109436238] family 7:lower_arc first feasible candidate at attempt 1/30: steps=74 raw_steps=74 deviation=0.092 path_ratio=1.04
+[seed 2109436238] family 7:lower_arc selected: steps=74 deviation=0.092 path_ratio=1.04
+[seed 2109436238] family 8:high_loop search started (30 candidates)
+[seed 2109436238] family 8:high_loop first feasible candidate at attempt 1/30: steps=89 raw_steps=89 deviation=0.222 path_ratio=1.24
+[seed 2109436238] family 8:high_loop selected: steps=89 deviation=0.222 path_ratio=1.24
+[seed 2109436238] family 9:low_loop search started (30 candidates)
+[seed 2109436238] family 9:low_loop first feasible candidate at attempt 1/30: steps=79 raw_steps=79 deviation=0.145 path_ratio=1.11
+[seed 2109436238] family 9:low_loop selected: steps=79 deviation=0.145 path_ratio=1.11
+[seed 2109436238] family 10:shallow_direct search started (30 candidates)
+[seed 2109436238] family 10:shallow_direct first feasible candidate at attempt 1/30: steps=72 raw_steps=72 deviation=0.038 path_ratio=1.01
+[seed 2109436238] family 10:shallow_direct selected: steps=72 deviation=0.038 path_ratio=1.01
+[seed 2109436238] family 11:extreme_detour search started (30 candidates)
+[waypoint diagnostics] family 11:extreme_detour: candidate_rejects=1 workspace_bounds_fail=4 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 11:extreme_detour: candidate_rejects=2 workspace_bounds_fail=8 base_clearance_fail=0 other_validity_fail=0
+[waypoint diagnostics] family 11:extreme_detour: candidate_rejects=3 workspace_bounds_fail=12 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436238] family 11:extreme_detour attempt 10/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[waypoint diagnostics] family 11:extreme_detour: candidate_rejects=20 workspace_bounds_fail=81 base_clearance_fail=0 other_validity_fail=0
+[seed 2109436238] family 11:extreme_detour attempt 20/30: geometry_ok=0 planner_ok=0 planner_fail=0 quality_ok=0 resampled_long=0 raw_too_long=0
+[seed 2109436238] family 11:extreme_detour first feasible candidate at attempt 23/30: steps=97 raw_steps=97 deviation=0.211 path_ratio=1.26
+[seed 2109436238] family 11:extreme_detour selected: steps=97 deviation=0.211 path_ratio=1.26
+[seed 2109436238] replay family 0:left_wide planned_steps=100
+[seed 2109436238] replay done 0:left_wide success=True final_distance=0.0159 settle=0
+[seed 2109436238] replay family 2:upper_left planned_steps=370
+[seed 2109436238] replay done 2:upper_left success=True final_distance=0.0192 settle=0
+[seed 2109436238] replay family 3:upper_right planned_steps=95
+[seed 2109436238] replay done 3:upper_right success=True final_distance=0.0201 settle=0
+[seed 2109436238] replay family 4:lower_left planned_steps=81
+[seed 2109436238] replay done 4:lower_left success=True final_distance=0.0178 settle=0
+[seed 2109436238] replay family 5:lower_right planned_steps=102
+[seed 2109436238] replay done 5:lower_right success=True final_distance=0.0226 settle=0
+[seed 2109436238] replay family 6:upper_arc planned_steps=73
+[seed 2109436238] replay done 6:upper_arc success=True final_distance=0.0192 settle=0
+[seed 2109436238] replay family 7:lower_arc planned_steps=74
+[seed 2109436238] replay done 7:lower_arc success=True final_distance=0.0229 settle=0
+[seed 2109436238] replay family 8:high_loop planned_steps=89
+[seed 2109436238] replay done 8:high_loop success=True final_distance=0.0215 settle=0
+[seed 2109436238] replay family 9:low_loop planned_steps=79
+[seed 2109436238] replay done 9:low_loop success=True final_distance=0.0220 settle=0
+[seed 2109436238] replay family 10:shallow_direct planned_steps=72
+[seed 2109436238] replay done 10:shallow_direct success=True final_distance=0.0222 settle=0
+[seed 2109436238] replay family 11:extreme_detour planned_steps=97
+[seed 2109436238] replay done 11:extreme_detour success=True final_distance=0.0228 settle=0
+[seed 2109436238] accepted 11/11 successful replayed families
+demo 29/30: seed=2109436238 variant=left_wide steps=105 hold=8 success=True final_distance=0.0159
+demo 30/30: seed=2109436238 variant=upper_left steps=376 hold=8 success=True final_distance=0.0192
+saved dataset: artifacts/debug_multimodal_v2.zarr
+summary: {'num_episodes': 30, 'num_steps': 3282, 'episode_ends': [93, 184, 275, 369, 454, 538, 611, 680, 751, 825, 886, 967, 1094, 1196, 1573, 1655, 1712, 1820, 1930, 2045, 2160, 2263, 2355, 2443, 2528, 2615, 2698, 2801, 2906, 3282], 'arrays': {'action': {'shape': [3282, 7], 'dtype': 'float32'}, 'point_cloud': {'shape': [3282, 1024, 3], 'dtype': 'float32'}, 'point_valid_mask': {'shape': [3282, 1024], 'dtype': 'bool'}, 'robot_mask': {'shape': [3282, 1024], 'dtype': 'bool'}, 'sim_action': {'shape': [3282, 8], 'dtype': 'float32'}, 'state': {'shape': [3282, 9], 'dtype': 'float32'}, 'success': {'shape': [3282], 'dtype': 'bool'}, 'target_position': {'shape': [3282, 3], 'dtype': 'float32'}, 'tcp_pose': {'shape': [3282, 7], 'dtype': 'float32'}, 'goal_pos': {'shape': [3282, 3], 'dtype': 'float32'}, 'goal_relative': {'shape': [3282, 3], 'dtype': 'float32'}, 'eef_pos': {'shape': [3282, 3], 'dtype': 'float32'}, 'trajectory_family_id': {'shape': [3282, 1], 'dtype': 'int64'}, 'trajectory_family_onehot': {'shape': [3282, 12], 'dtype': 'float32'}}}
+dataset_stats: {"action_norm": {"max": 3.885260581970215, "mean": 2.671175241470337, "min": 1.2519798278808594}, "episode_length": {"max": 377.0, "mean": 109.4, "min": 57.0}, "final_distance": {"max": 0.024825522676110268, "mean": 0.020677777007222176, "min": 0.012722990475594997}, "hold_coverage": 1.0, "hold_steps_recorded": {"max": 8.0, "mean": 8.0, "min": 8.0}, "hold_steps_requested": {"max": 8.0, "mean": 8.0, "min": 8.0}, "num_episodes": 30, "num_steps": 3282, "robot_mask_points": {"max": 256.0, "mean": 256.0, "min": 256.0}, "settle_coverage": 0.0, "settle_steps_recorded": {"max": 0.0, "mean": 0.0, "min": 0.0}, "settle_steps_requested": {"max": 30.0, "mean": 30.0, "min": 30.0}, "success_rate": 1.0, "valid_points": {"max": 1024.0, "mean": 1024.0, "min": 1024.0}}

@@ -5,7 +5,7 @@ import numpy as np
 Array = np.ndarray
 
 DEFAULT_GOAL_MARKER_POINTS = 16
-DEFAULT_GOAL_MARKER_RADIUS = 0.015
+DEFAULT_GOAL_MARKER_RADIUS = 0.045
 
 
 def goal_marker_offsets(
@@ -13,7 +13,7 @@ def goal_marker_offsets(
     num_points: int = DEFAULT_GOAL_MARKER_POINTS,
     radius: float = DEFAULT_GOAL_MARKER_RADIUS,
 ) -> Array:
-    """Return the fixed ordered offsets used for target-centered goal tokens."""
+    """Return deterministic structured offsets used for target-centered goal tokens."""
     if num_points < 0:
         raise ValueError("num_points must be non-negative")
     if radius < 0:
@@ -22,31 +22,40 @@ def goal_marker_offsets(
         return np.zeros((0, 3), dtype=np.float32)
 
     r = np.float32(radius)
-    base = np.asarray(
+    if r == 0:
+        return np.zeros((num_points, 3), dtype=np.float32)
+
+    pattern: list[np.ndarray] = [np.zeros(3, dtype=np.float32)]
+    cross_dirs = np.asarray(
         [
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-            [r, 0.0, 0.0],
-            [-r, 0.0, 0.0],
-            [0.0, r, 0.0],
-            [0.0, -r, 0.0],
-            [0.0, 0.0, r],
-            [0.0, 0.0, -r],
-            [r, r, r],
-            [r, r, -r],
-            [r, -r, r],
-            [r, -r, -r],
-            [-r, r, r],
-            [-r, r, -r],
-            [-r, -r, r],
-            [-r, -r, -r],
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
         ],
         dtype=np.float32,
     )
-    if num_points <= base.shape[0]:
-        return base[:num_points].copy()
-    repeats = int(np.ceil(num_points / base.shape[0]))
-    return np.tile(base, (repeats, 1))[:num_points].astype(np.float32, copy=False)
+    for direction in cross_dirs:
+        pattern.append(r * direction)
+
+    ring_count = max(0, num_points - len(pattern))
+    for idx in range(ring_count):
+        angle = 2.0 * np.pi * idx / max(ring_count, 1)
+        ring_radius = r * (0.70 if idx % 2 == 0 else 1.00)
+        z_offset = r * 0.25 * (1.0 if idx % 4 in {0, 1} else -1.0)
+        pattern.append(
+            np.asarray(
+                [ring_radius * np.cos(angle), ring_radius * np.sin(angle), z_offset],
+                dtype=np.float32,
+            )
+        )
+
+    if num_points <= len(pattern):
+        return np.asarray(pattern[:num_points], dtype=np.float32)
+    repeats = int(np.ceil(num_points / len(pattern)))
+    return np.tile(np.asarray(pattern, dtype=np.float32), (repeats, 1))[:num_points]
 
 
 def goal_marker_points(

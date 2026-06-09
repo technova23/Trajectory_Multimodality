@@ -4,6 +4,7 @@ import logging
 import math
 from collections.abc import Mapping, Sequence
 
+from PIL.features import features
 import einops
 import torch
 from torch import nn
@@ -96,6 +97,30 @@ class Conv1dBlock(nn.Module):
         return self.block(x)
 
 
+class CrossAttention(nn.Module):
+    """Single-head cross attention from action-time features to observation tokens."""
+
+    def __init__(self, query_dim: int, cond_dim: int, out_dim: int) -> None:
+        super().__init__()
+        self.query_proj = nn.Linear(query_dim, out_dim)
+        self.key_proj = nn.Linear(cond_dim, out_dim)
+        self.value_proj = nn.Linear(cond_dim, out_dim)
+        self.out_proj = nn.Linear(out_dim, out_dim)
+        self.scale = out_dim**-0.5
+
+    def forward(self, x: torch.Tensor, cond: torch.Tensor) -> torch.Tensor:
+        """Attend from ``x`` [B, H, C] to ``cond`` [B, S, D]."""
+        if cond.ndim == 2:
+            cond = cond.unsqueeze(1)
+        if cond.ndim != 3:
+            raise ValueError(f"cross-attention cond must be 2D or 3D, got {cond.shape}")
+        query = self.query_proj(x)
+        key = self.key_proj(cond)
+        value = self.value_proj(cond)
+        weights = torch.softmax(torch.matmul(query, key.transpose(1, 2)) * self.scale, dim=-1)
+        return self.out_proj(torch.matmul(weights, value))
+
+
 class ConditionalResidualBlock1D(nn.Module):
     """Residual 1D block conditioned by FiLM timestep/global features."""
 
@@ -117,14 +142,17 @@ class ConditionalResidualBlock1D(nn.Module):
                 Conv1dBlock(out_channels, out_channels, kernel_size, n_groups=n_groups),
             ]
         )
-        if condition_type != "film":
+        if condition_type == "film":
+            self.cond_encoder = nn.Sequential(
+                nn.Mish(),
+                nn.Linear(cond_dim, out_channels * 2),
+            )
+        elif condition_type in {"cross_attention", "cross_attention_add"}:
+            self.cond_encoder = CrossAttention(in_channels, cond_dim, out_channels)
+        else:
             raise NotImplementedError(
                 f"condition_type {condition_type!r} is not in the pg3d DP3 slice"
             )
-        self.cond_encoder = nn.Sequential(
-            nn.Mish(),
-            nn.Linear(cond_dim, out_channels * 2),
-        )
         self.residual_conv = (
             nn.Conv1d(in_channels, out_channels, kernel_size=1)
             if in_channels != out_channels
@@ -135,11 +163,17 @@ class ConditionalResidualBlock1D(nn.Module):
         """Apply the residual block to ``[batch, channels, horizon]`` features."""
         out = self.blocks[0](x)
         if cond is not None:
-            embed = self.cond_encoder(cond)
-            embed = embed.reshape(embed.shape[0], 2, self.out_channels, 1)
-            scale = embed[:, 0]
-            bias = embed[:, 1]
-            out = scale * out + bias
+            if self.condition_type == "film":
+                embed = self.cond_encoder(cond)
+                embed = embed.reshape(embed.shape[0], 2, self.out_channels, 1)
+                scale = embed[:, 0]
+                bias = embed[:, 1]
+                out = scale * out + bias
+            elif self.condition_type in {"cross_attention", "cross_attention_add"}:
+                embed = self.cond_encoder(x.transpose(1, 2), cond).transpose(1, 2)
+                out = out + embed
+            else:
+                raise NotImplementedError(f"condition_type {self.condition_type!r} is unsupported")
         out = self.blocks[1](out)
         return out + self.residual_conv(x)
 
@@ -158,6 +192,7 @@ class ConditionalUnet1D(nn.Module):
         condition_type: str = "film",
     ) -> None:
         super().__init__()
+        self.condition_type = condition_type
         all_dims = [input_dim, *list(down_dims)]
         start_dim = down_dims[0]
         cond_dim = diffusion_step_embed_dim + (global_cond_dim or 0)
@@ -238,11 +273,23 @@ class ConditionalUnet1D(nn.Module):
             timesteps = timesteps[None].to(x.device)
         timesteps = timesteps.expand(x.shape[0])
         timestep_embed = self.diffusion_step_encoder(timesteps)
-        cond = (
-            timestep_embed
-            if global_cond is None
-            else torch.cat([timestep_embed, global_cond], dim=-1)
-        )
+        if "cross_attention" in self.condition_type:
+            if global_cond is None:
+                cond = timestep_embed.unsqueeze(1)
+            else:
+                if global_cond.ndim != 3:
+                    raise ValueError(
+                        "cross-attention global_cond must be [batch, tokens, dim], "
+                        f"got {global_cond.shape}"
+                    )
+                timestep_tokens = timestep_embed.unsqueeze(1).expand(-1, global_cond.shape[1], -1)
+                cond = torch.cat([timestep_tokens, global_cond], dim=-1)
+        else:
+            cond = (
+                timestep_embed
+                if global_cond is None
+                else torch.cat([timestep_embed, global_cond], dim=-1)
+            )
 
         h: list[torch.Tensor] = []
         for resnet, downsample in self.down_modules:
@@ -401,6 +448,7 @@ class DP3Encoder(nn.Module):
             features.append(self.extractor(points))
         state_feat = self.state_mlp(observations[self.state_key])
         features.append(state_feat)
+
         return torch.cat(features, dim=-1)
 
     def output_shape(self) -> int:

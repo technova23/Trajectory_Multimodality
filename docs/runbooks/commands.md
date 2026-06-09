@@ -543,6 +543,50 @@ The rollout script re-observes after each configurable `--replan-stride` chunk, 
 weights by default when present, records one post-success hold window by default, and always logs
 the goal marker in the Rerun timeline.
 
+Inspect stochastic DP3 action-chunk diversity from one fixed dataset observation without launching
+ManiSkill:
+
+```bash
+uv run python -m pg3d.multimodality \
+  --dataset artifacts/pg3d_reach_500pairs_4variants.zarr \
+  --checkpoint artifacts/reach-checkpoints/500pairs_4variants_100k/final_step_00100000.pt \
+  --checkpoint-model ema \
+  --episode-index 0 \
+  --samples 64 \
+  --keep-diverse 8 \
+  --device cuda \
+  --output-dir artifacts/multimodality/episode_000
+```
+
+This writes the full sample pool to `samples.npz` / `action_chunks.png` /
+`action_trajectories.html` and the farthest-first subset to `selected_samples.npz` /
+`selected_action_chunks.png` / `selected_action_trajectories.html`. The selected artifacts are the
+ones to inspect first when looking for distinct modes. The HTML loads Plotly.js from the browser
+via CDN.
+
+To keep only closed-loop attempts that actually reach the target from the same dataset start/goal,
+run the simulator-backed success filter:
+
+```bash
+uv run python -m pg3d.multimodality \
+  --mode success-rollouts \
+  --dataset artifacts/pg3d_reach_500pairs_4variants.zarr \
+  --checkpoint artifacts/reach-checkpoints/500pairs_4variants_100k/final_step_00100000.pt \
+  --checkpoint-model ema \
+  --episode-index 4 \
+  --attempts 96 \
+  --success-count 8 \
+  --seed 0 \
+  --device cuda \
+  --max-steps 180 \
+  --replan-stride 1 \
+  --post-success-steps 8 \
+  --output-dir artifacts/multimodality/episode_004_success8
+```
+
+Successful videos are copied to `success_videos/`, failed videos are discarded by default, and the
+per-attempt verdicts are written to `success_rollout_summary.json`.
+
 ## World-model versus simulator rollout comparison
 
 Compare a stable DP3 reach checkpoint against the P07 world model. The policy is queried from the

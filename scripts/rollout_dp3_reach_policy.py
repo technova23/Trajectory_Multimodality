@@ -80,6 +80,21 @@ def main(argv: list[str] | None = None) -> int:
         device=device,
         prefer_ema=args.checkpoint_model == "ema",
     )
+    trajectory_family_count = _policy_trajectory_family_count(policy)
+    trajectory_family_id = args.trajectory_family_id
+    if trajectory_family_count is not None:
+        if trajectory_family_id is None:
+            trajectory_family_id = min(10, trajectory_family_count - 1)
+        if not 0 <= trajectory_family_id < trajectory_family_count:
+            raise ValueError(
+                "--trajectory-family-id must be in "
+                f"[0, {trajectory_family_count - 1}], got {trajectory_family_id}"
+            )
+        print(
+            "rollout family conditioning: "
+            f"id={trajectory_family_id} count={trajectory_family_count}",
+            flush=True,
+        )
     metadata = load_reach_metadata(args.dataset)
     dataset_episode_seeds = [
         int(episode["seed"]) for episode in metadata.get("episodes", []) if "seed" in episode
@@ -126,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
                     gripper_open=args.gripper_open,
                     video_fps=args.video_fps,
                     metrics_file=metrics_file,
+                    trajectory_family_id=trajectory_family_id,
+                    trajectory_family_count=trajectory_family_count,
                 )
                 summaries.append(summary)
                 print(
@@ -183,6 +200,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--post-success-steps", type=int, default=8)
     parser.add_argument("--gripper-open", type=float, default=0.04)
     parser.add_argument("--video-fps", type=int, default=10)
+    parser.add_argument(
+        "--trajectory-family-id",
+        type=int,
+        default=None,
+        help=(
+            "family id to inject for checkpoints trained with trajectory_family_onehot; "
+            "defaults to shallow_direct id 10 when available"
+        ),
+    )
     parser.add_argument("--allow-failure", action="store_true")
     args = parser.parse_args(argv)
     if args.episodes <= 0:
@@ -213,6 +239,8 @@ def run_policy_rollout(
     metrics_file: Any | None,
     video_path: Path | None = None,
     write_rerun: bool = True,
+    trajectory_family_id: int | None = None,
+    trajectory_family_count: int | None = None,
 ) -> dict[str, Any]:
     obs, info = env.reset(seed=spec.seed, options={"reconfigure": True})
     frames = [_frame_to_numpy(env.render())]
@@ -237,6 +265,8 @@ def run_policy_rollout(
                 device=device,
                 goal_marker_points=int(policy.goal_marker_points),
                 goal_marker_radius=float(policy.goal_marker_radius),
+                trajectory_family_id=trajectory_family_id,
+                trajectory_family_count=trajectory_family_count,
             )
             policy_output = policy.predict_action(policy_input)
             action_chunk = policy_output["action"][0].detach().cpu().numpy()
@@ -410,6 +440,8 @@ def obs_window_to_torch(
     device: torch.device,
     goal_marker_points: int = 0,
     goal_marker_radius: float = DEFAULT_GOAL_MARKER_RADIUS,
+    trajectory_family_id: int | None = None,
+    trajectory_family_count: int | None = None,
 ) -> dict[str, torch.Tensor]:
     """Convert a rolling observation window into a batched DP3 observation dict."""
     point_cloud = np.stack([entry["point_cloud"] for entry in window], axis=0)
@@ -422,10 +454,33 @@ def obs_window_to_torch(
             radius=goal_marker_radius,
         )
     agent_pos = np.stack([entry["agent_pos"] for entry in window], axis=0)
-    return {
+    batch = {
         "point_cloud": torch.from_numpy(point_cloud.astype(np.float32)).unsqueeze(0).to(device),
         "agent_pos": torch.from_numpy(agent_pos.astype(np.float32)).unsqueeze(0).to(device),
     }
+    if trajectory_family_count is not None:
+        if trajectory_family_count <= 0:
+            raise ValueError("trajectory_family_count must be positive")
+        family_id = 0 if trajectory_family_id is None else int(trajectory_family_id)
+        if not 0 <= family_id < trajectory_family_count:
+            raise ValueError(
+                f"trajectory_family_id={family_id} is outside [0, {trajectory_family_count - 1}]"
+            )
+        family = np.zeros((len(window), trajectory_family_count), dtype=np.float32)
+        family[:, family_id] = 1.0
+        batch["trajectory_family_onehot"] = (
+            torch.from_numpy(family).unsqueeze(0).to(device)
+        )
+    return batch
+
+
+def _policy_trajectory_family_count(policy: SimpleDP3) -> int | None:
+    family_shape = getattr(policy.obs_encoder, "family_shape", None)
+    if family_shape is None:
+        return None
+    if len(family_shape) != 1:
+        raise ValueError(f"unsupported trajectory family shape: {family_shape}")
+    return int(family_shape[0])
 
 
 def policy_action_to_sim_action(

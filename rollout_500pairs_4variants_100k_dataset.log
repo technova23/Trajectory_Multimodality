@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/mnt/e/KM_regeneration/coding-agents-steer-dp3/scripts/rollout_dp3_reach_policy.py", line 674, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/mnt/e/KM_regeneration/coding-agents-steer-dp3/scripts/rollout_dp3_reach_policy.py", line 77, in main
+    device = select_device(args.device)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/e/KM_regeneration/coding-agents-steer-dp3/pg3d/utils/devices.py", line 11, in select_device
+    raise RuntimeError("cuda requested but torch.cuda.is_available() is false")
+RuntimeError: cuda requested but torch.cuda.is_available() is false

@@ -168,11 +168,12 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
                 num_points=self.config.goal_marker_points,
                 radius=self.config.goal_marker_radius,
             )
+        obs = {
+            "point_cloud": torch.from_numpy(point_cloud),
+            "agent_pos": torch.from_numpy(sample["state"].astype(np.float32)),
+        }
         return {
-            "obs": {
-                "point_cloud": torch.from_numpy(point_cloud),
-                "agent_pos": torch.from_numpy(sample["state"].astype(np.float32)),
-            },
+            "obs": obs,
             "action": torch.from_numpy(sample["action"].astype(np.float32)),
         }
 
@@ -228,11 +229,10 @@ class ReachSequenceDataset(torch.utils.data.Dataset):
 
     def _sample_sequence(self, idx: int) -> dict[str, np.ndarray]:
         buffer_start, buffer_end, sample_start, sample_end = self.indices[idx]
-        keys = (
-            ("point_cloud", "state", "action", self.target_position_key)
-            if self.config.goal_marker_points
-            else ("point_cloud", "state", "action")
-        )
+        keys = ["point_cloud", "state", "action"]
+        if self.config.goal_marker_points:
+            keys.append(self.target_position_key)
+        keys = tuple(keys)
         sample = {
             key: sample_padded_sequence(
                 self.root["data"][key],
@@ -257,11 +257,12 @@ def reach_shape_meta(
     action_dim: int = 7,
 ) -> dict[str, dict[str, dict[str, list[int]]]]:
     """Shape metadata for pg3d-native DP3 on the ManiSkill reach schema."""
+    obs = {
+        "point_cloud": {"shape": [num_points, point_dim]},
+        "agent_pos": {"shape": [state_dim]},
+    }
     return {
-        "obs": {
-            "point_cloud": {"shape": [num_points, point_dim]},
-            "agent_pos": {"shape": [state_dim]},
-        },
+        "obs": obs,
         "action": {"shape": [action_dim]},
     }
 
